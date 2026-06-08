@@ -572,6 +572,33 @@ PROJEKTMINNE:
 FASÖVERSIKT:
 {phases}"""
 
+# ─── Domare — aktiveras efter max_iter misslyckanden ─────────────────────────
+
+DOMARE_PROMPT = """Du är Domaren — du aktiveras när granskningspipelinen misslyckats {max_iter} gånger i rad.
+
+DITT ENDA JOBB:
+Analysera ALLA misslyckade iterationer och sammanställ en tydlig rapport till Projektledaren.
+
+Du ska svara på:
+1. Vilka problem återkommer i VARJE iteration? (dessa är blockerare)
+2. Vilka problem dök upp bara ibland? (dessa är sekundära)
+3. Vad är grundorsaken — är det specat för oklart, tekniskt problem, eller resursbrist?
+4. Vad behöver göras FÖRE detta kan byggas? Prioriterat 1-3 åtgärder.
+
+FORMAT — returnera ENBART JSON:
+{{
+  "blockerare": [
+    {{"problem": "...", "berorda_agenter": ["..."], "antal_iterationer": 2, "rekommendation": "..."}}
+  ],
+  "sekundara_problem": ["..."],
+  "grundorsak": "Spec för vag / Teknisk skuld / Saknat beroende / Säkerhetsrisk",
+  "prioriterad_atgardsplan": [
+    {{"prioritet": 1, "atgard": "...", "vem": "Användaren/Snickaren/Projektledaren", "beraknad_tid": "..."}}
+  ],
+  "projektledare_sammanfattning": "Kortfattad text som Projektledaren kan presentera direkt för användaren på svenska",
+  "kan_byggas_nu": false
+}}"""
+
 # ─── Post-build agenter (kör automatiskt efter varje bygge) ──────────────────
 # Varje agent har ett ENDA ansvar — inga överlapp.
 
@@ -690,6 +717,37 @@ def run_agent_ollama(agent_def: dict, spec: str, memory: str, feedback: str = ""
                 "status": "GODKÄND", "findings": [f"Ollama-fel: {ex}"],
                 "severity": "LOW", "suggestions": [], "_local": True}
 
+def _parse_json_robust(text: str) -> dict:
+    """Parsar JSON robust — hittar yttersta { } korrekt även vid nested objekt."""
+    text = text.strip()
+    # Hitta första {
+    start = text.find("{")
+    if start == -1:
+        return {}
+    # Räkna brackets för att hitta matchande }
+    depth = 0
+    end = -1
+    for i in range(start, len(text)):
+        if text[i] == "{":
+            depth += 1
+        elif text[i] == "}":
+            depth -= 1
+            if depth == 0:
+                end = i + 1
+                break
+    if end == -1:
+        return {}
+    try:
+        return json.loads(text[start:end])
+    except json.JSONDecodeError:
+        # Sista utväg: ta bort kommentarer och försök igen
+        cleaned = "\n".join(l for l in text[start:end].split("\n") if not l.strip().startswith("//"))
+        try:
+            return json.loads(cleaned)
+        except Exception:
+            return {}
+
+
 def run_agent(agent_def: dict, spec: str, memory: str, feedback: str = "", s: dict = None, code_context: str = "") -> dict:
     if s is None: s = load_settings()
     model_key = agent_def.get("model","sonnet")
@@ -706,12 +764,15 @@ def run_agent(agent_def: dict, spec: str, memory: str, feedback: str = "", s: di
     model_name = model_for(model_key, s)
     fb = f"\n\nFEEDBACK:\n{feedback}" if feedback else ""
     code_block = f"\n\nKODBAS (aktuell):\n{code_context[:8000]}" if code_context else ""
+    is_domare = agent_def.get("id") == "domare"
+    max_tokens = 2000 if is_domare else 900
     try:
-        r = client_inst.messages.create(model=model_name, max_tokens=900,
+        r = client_inst.messages.create(model=model_name, max_tokens=max_tokens,
             system=agent_def["prompt"],
             messages=[{"role":"user","content":f"MINNE:\n{memory}\n\nSPEC:\n{spec}{code_block}{fb}\n\nReturnera ENBART JSON."}])
-        text = r.content[0].text.strip(); si, e = text.find("{"), text.rfind("}")+1
-        data = json.loads(text[si:e]) if si != -1 else {}
+        text = r.content[0].text.strip()
+        # Robust JSON-parser: hitta yttersta { } korrekt (hanterar nested)
+        data = _parse_json_robust(text)
         data["agent"]=agent_def["name"]; data["id"]=agent_def["id"]; return data
     except Exception as ex:
         return {"agent":agent_def["name"],"id":agent_def["id"],"status":"GODKÄND","findings":[f"Fel: {ex}"],"severity":"LOW","suggestions":[]}
@@ -971,6 +1032,8 @@ async def review_feature(payload: dict):
         "agents": [{"id": a["id"], "name": f"{a.get('emoji','')}{a['name']}", "model": a.get("model","haiku")}
                    for a in agents + [inspector]]})
 
+    all_iteration_results = []  # Samlar ALLA iterationers data för Domaren
+
     for iteration in range(1, max_iter + 1):
         await manager.broadcast({"type": "iteration", "iteration": iteration, "max": max_iter})
         for agent in agents:
@@ -1042,6 +1105,13 @@ async def review_feature(payload: dict):
             "suggestions": insp.get("suggestions", []),
             "inspector_note": snickare_instruktioner})
 
+        # Spara hela iterationens data för Domaren
+        all_iteration_results.append({
+            "iteration": iteration,
+            "agent_results": results,
+            "inspector": insp,
+        })
+
         if insp_status in ("GODKAND", "GODKÄND"):
             all_approved = True
             features = load_features(proj["id"])
@@ -1053,7 +1123,7 @@ async def review_feature(payload: dict):
                 "feature": feature_name, "snickare_instruktioner": snickare_instruktioner})
             break
 
-        # Avbryt och fraga anvandaren bara om Inspector explicit vill det
+        # Avbryt och fraga anvandaren bara om Inspector explicit vill det (tidigt)
         if user_question and iteration >= 2:
             await manager.broadcast({"type": "pipeline_done", "success": False,
                 "feature": feature_name, "user_question": user_question,
@@ -1061,8 +1131,82 @@ async def review_feature(payload: dict):
             return JSONResponse({"approved": False, "user_question": user_question})
 
         if iteration == max_iter:
+            # MAX ITERATIONER NATT — aktivera Domaren
+            await manager.broadcast({"type": "domare_start", "feature": feature_name,
+                "iterations": max_iter})
+
+            # Bygg Domarens input — ALLA iterationers fynd per agent
+            domare_sections = []
+            for iter_data in all_iteration_results:
+                it = iter_data["iteration"]
+                domare_sections.append(f"## ITERATION {it}/{max_iter}")
+                for r in iter_data["agent_results"]:
+                    st = r.get("status", "?")
+                    sev = r.get("severity", "LOW")
+                    finds = "; ".join(r.get("findings", [])) or "Inga fynd"
+                    domare_sections.append(
+                        f"  {r.get('agent','?')} [{st}][{sev}]: {finds}"
+                    )
+                insp_it = iter_data["inspector"]
+                domare_sections.append(
+                    f"  Inspector [{insp_it.get('status','?')}]: "
+                    + "; ".join(insp_it.get("findings", []))
+                )
+
+            domare_input = (
+                f"FEATURE: {feature_name}\n\nSPEC:\n{spec_str[:1500]}\n\n"
+                + "\n".join(domare_sections)
+            )
+
+            domare_agent = {
+                "id": "domare",
+                "name": "Domaren",
+                "emoji": "⚖️",
+                "model": "sonnet",
+                "prompt": DOMARE_PROMPT.format(max_iter=max_iter),
+            }
+
+            await manager.broadcast({"type": "agent_status", "id": "domare",
+                "name": "⚖️ Domaren", "status": "running"})
+            domare_result = await loop.run_in_executor(
+                None, run_agent, domare_agent, domare_input, memory, "", s, code_ctx)
+
+            # Extrahera Domarens JSON
+            try:
+                dom_text = json.dumps(domare_result, ensure_ascii=False)
+            except Exception:
+                dom_text = str(domare_result)
+
+            pl_summary = domare_result.get("projektledare_sammanfattning",
+                "Pipelinen misslyckades — se Domarens rapport.")
+            blockerare = domare_result.get("blockerare", [])
+            atgarder = domare_result.get("prioriterad_atgardsplan", [])
+
+            await manager.broadcast({"type": "agent_status", "id": "domare",
+                "name": "⚖️ Domaren", "status": "rejected",
+                "findings": [b.get("problem","") for b in blockerare],
+                "severity": "HIGH"})
+
+            # Skicka Domarens rapport till Projektledaren som chat-meddelande
+            pl_message = (
+                f"Jag har analyserat varför '{feature_name}' inte kunde byggas "
+                f"efter {max_iter} försök.\n\n"
+                f"{pl_summary}\n\n"
+            )
+            if blockerare:
+                pl_message += "**Blockerare:**\n"
+                for b in blockerare:
+                    pl_message += f"- {b.get('problem','')} (berör: {', '.join(b.get('berorda_agenter',[]))})\n"
+            if atgarder:
+                pl_message += "\n**Rekommenderad åtgärdsplan:**\n"
+                for a in atgarder:
+                    pl_message += f"{a.get('prioritet','?')}. {a.get('atgard','')} — {a.get('vem','')}\n"
+            pl_message += "\nVad vill du göra?"
+
             await manager.broadcast({"type": "pipeline_done", "success": False,
-                "feature": feature_name, "reason": "; ".join(insp.get("findings", []))})
+                "feature": feature_name,
+                "domare_report": domare_result,
+                "projektledare_message": pl_message})
 
     return JSONResponse({"approved": all_approved, "snickare_instruktioner": snickare_instruktioner})
 
@@ -1959,14 +2103,13 @@ async def git_push_to_github():
         return JSONResponse({"ok": False, "error": err})
 
     await manager.broadcast({"type": "git_push_done", "url": f"https://github.com/Stuwish1/{repo_name}"})
-    return JSONResponse({"ok": True, "url": f"https://github.com/Stuwish1/{repo_name}", "steps": steps})
+    return JSONResponse({"ok": True, "url": f"https://github.com/Stuwish1/{repo_name}"})
 
-# ─── Hot-reload: bevaka index.html och skicka reload till browser ─────────────
+
+# ─── Startup: hot-reload file watcher ────────────────────────────────────────
 
 @app.on_event("startup")
 async def start_file_watcher():
-    """Bevakar index.html — skickar hot_reload via WS när filen ändras."""
-    import asyncio, os
     async def _watch():
         html_path = Path("index.html")
         last_mtime = html_path.stat().st_mtime if html_path.exists() else 0
@@ -1982,88 +2125,7 @@ async def start_file_watcher():
     asyncio.create_task(_watch())
 
 
-# ─── Post-build pipeline — 3 agenter parallellt ───────────────────────────────
-
-@app.post("/api/debug-scan")  # bakåtkompatibelt alias
-@app.post("/api/post-build-check")
-async def post_build_check(payload: dict):
-    """Kör alla 3 post-build-agenter parallellt på pendande filer."""
-    feature_name = payload.get("feature_name", "Okänd")
-    proj = get_active_project()
-    if not proj:
-        return JSONResponse({"ok": False, "error": "Inget projekt"})
-    pid = proj["id"]
-    s = load_settings()
-    pending = load_pending(pid)
-    if not pending:
-        return JSONResponse({"ok": True, "all_approved": True, "results": [], "needs_fix": False})
-
-    files = pending.get("files", [])
-    kod_kontext = "\n\n".join(
-        f"=== {fc['path']} ({fc.get('action','create')}) ===\n{fc.get('content','')[:2500]}"
-        for fc in files
-    )
-
-    await manager.broadcast({"type": "post_build_start", "feature": feature_name,
-        "agents": [{"id": a["id"], "name": f"{a['emoji']} {a['name']}", "stage": "post"} for a in POST_BUILD_AGENTS]})
-
-    loop = asyncio.get_event_loop()
-    results = []
-
-    def run_post_agent(agent):
-        spec = f"Genererad kod att granska:\n\n{kod_kontext}"
-        r = run_agent(agent, spec, "", "", s)
-        return r
-
-    with ThreadPoolExecutor(max_workers=3) as ex:
-        futures = {ex.submit(run_post_agent, agent): agent for agent in POST_BUILD_AGENTS}
-        for future in futures:
-            agent = futures[future]
-            try:
-                result = future.result(timeout=120)
-            except Exception as e:
-                result = {"id": agent["id"], "agent": agent["name"], "status": "GODKÄND",
-                          "findings": [f"Post-agent fel: {e}"], "severity": "LOW", "suggestions": []}
-            results.append(result)
-            await manager.broadcast({"type": "post_agent_done",
-                "id": result.get("id"), "name": result.get("agent","?"),
-                "status": "approved" if result.get("status") in ("GODKÄND","GODKAND") else "rejected",
-                "findings": result.get("findings", []),
-                "severity": result.get("severity", "LOW"),
-                "suggestions": result.get("suggestions", [])})
-
-    needs_fix = any(r.get("status") not in ("GODKÄND","GODKAND") and r.get("severity") in ("HIGH","MEDIUM")
-                    for r in results)
-    all_approved = not needs_fix
-    await manager.broadcast({"type": "post_build_done",
-        "feature": feature_name,
-        "all_approved": all_approved,
-        "needs_fix": needs_fix,
-        "results": results})
-    return JSONResponse({"ok": True, "all_approved": all_approved, "results": results, "needs_fix": needs_fix})
-
-
-# ─── Startup: hot-reload file watcher ─────────────────────────────────────────
-
-@app.on_event("startup")
-async def start_file_watcher():
-    import asyncio, os
-    async def _watch():
-        html_path = Path("index.html")
-        last_mtime = html_path.stat().st_mtime if html_path.exists() else 0
-        while True:
-            await asyncio.sleep(1)
-            try:
-                mtime = html_path.stat().st_mtime
-                if mtime != last_mtime:
-                    last_mtime = mtime
-                    await manager.broadcast({"type": "hot_reload", "file": "index.html"})
-            except Exception:
-                pass
-    asyncio.create_task(_watch())
-
-
-if __name__=="__main__":
+if __name__ == "__main__":
     import uvicorn
     s = load_settings()
     has_key = "OK" if s.get("api_key") else "SAKNAS"

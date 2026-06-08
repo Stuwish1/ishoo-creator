@@ -771,14 +771,27 @@ function setEnv(env){
 }
 
 // ─── WEBSOCKET ────────────────────────────────────────────────────────────────
+const _seenMsgIds = new Set(); // Deduplicera WS-meddelanden vid flera anslutningar
+
 function connectWS(){
+  // Stäng gammal anslutning om den finns
+  if(ws && ws.readyState !== WebSocket.CLOSED){
+    ws.onclose = null; // förhindra auto-reconnect på den gamla
+    ws.close();
+  }
   ws=new WebSocket('ws://localhost:8000/ws');
   ws.onopen=()=>document.getElementById('connDot').classList.add('ok');
   ws.onclose=()=>{document.getElementById('connDot').classList.remove('ok');setTimeout(connectWS,3000);};
   ws.onmessage=e=>{
     const msg=JSON.parse(e.data);
+    // Deduplicera — varje unik kombination av type+feature+iteration
+    const dedupKey = `${msg.type}|${msg.feature||''}|${msg.iteration||''}|${msg.id||''}|${msg.status||''}`;
+    if(msg.type !== 'hot_reload'){
+      if(_seenMsgIds.has(dedupKey)) return; // ignorera duplikat
+      _seenMsgIds.add(dedupKey);
+      if(_seenMsgIds.size > 200) _seenMsgIds.clear(); // rensa cache
+    }
     if(msg.type==='hot_reload'){
-      // Visa toast-notis och ladda om sidan
       const t=document.createElement('div');
       t.style.cssText='position:fixed;bottom:20px;right:20px;background:#7c3aed;color:#fff;padding:8px 14px;border-radius:8px;font-size:12px;z-index:9999;opacity:0;transition:opacity .3s;';
       t.textContent='🔄 Uppdaterar...';
@@ -815,12 +828,38 @@ function handleWS(msg){
       setProgress(100,'✅ Godkänd — klar att bygga');
       addMsg('assistant',`✅ Alla agenter godkände **${msg.feature}**!\n\nKlicka **Bygg kod** för att generera ändringar.`);
       showActionBar('reviewed',msg.feature);
+    } else if(msg.projektledare_message){
+      // Domaren har analyserat — Projektledaren presenterar rapporten
+      setProgress(0,'⚖️ Domaren har analyserat');
+      // Spara rapporten globalt så användaren kan komma åt den
+      window._lastDomarReport = msg.domare_report || {};
+      window._lastDomarFeature = msg.feature;
+      // Bygg meddelande med expanderbar rapport + diskutera-knapp
+      const reportJson = JSON.stringify(msg.domare_report || {}, null, 2);
+      const msgHtml = `
+        <div>${(msg.projektledare_message||'').replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>').replace(/\n/g,'<br>')}</div>
+        <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
+          <button onclick="toggleDomarDetail(this)" style="background:var(--border);border:none;border-radius:6px;padding:5px 10px;font-size:11px;cursor:pointer;color:var(--text)">📋 Visa full rapport</button>
+          <button onclick="diskuteraDomare()" style="background:var(--accent);border:none;border-radius:6px;padding:5px 10px;font-size:11px;cursor:pointer;color:#fff">💬 Diskutera med AI</button>
+        </div>
+        <pre id="domarDetail" style="display:none;margin-top:8px;font-size:10px;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:8px;overflow:auto;max-height:300px;white-space:pre-wrap">${reportJson.replace(/</g,'&lt;')}</pre>`;
+      addMsg('assistant', msgHtml, true);
+      hideActionBar();
+    } else if(msg.user_question){
+      setProgress(0,'❓ Inspector behöver svar');
+      addMsg('assistant', `❓ **${msg.feature}:** ${msg.user_question}`);
+      hideActionBar();
     } else {
-      setProgress(0,'❌ Max iterationer nådda');
-      addMsg('assistant',`⚠️ **${msg.feature}** nådde max iterationer utan godkännande.`);
+      setProgress(0,'❌ Granskning misslyckades');
+      const reason = msg.reason ? `\n\n_${msg.reason}_` : '';
+      addMsg('assistant',`⚠️ **${msg.feature}** kunde inte godkännas.${reason}`);
       hideActionBar();
     }
     loadFeatures();
+  }
+  else if(msg.type==='domare_start'){
+    setProgress(5,'⚖️ Domaren analyserar alla misslyckanden...');
+    addMsg('assistant',`⚖️ Pipelinen misslyckades ${msg.iterations} gånger. **Domaren** analyserar nu alla iterationers rapporter...`);
   }
   else if(msg.type==='build_start') setProgress(5,`Snickaren bygger...`);
   else if(msg.type==='build_progress') setProgress(40,msg.message);
@@ -1533,6 +1572,27 @@ function closeHealth(){document.getElementById('healthModal').classList.remove('
 document.getElementById('healthModal').addEventListener('click',e=>{if(e.target===document.getElementById('healthModal'))closeHealth();});
 
 function rejectBuild(){closeDiff();addMsg('assistant','Koden avvisad. Berätta vad som ska ändras.');hideActionBar();appState='idle';}
+
+function toggleDomarDetail(btn){
+  const pre=document.getElementById('domarDetail');
+  if(!pre)return;
+  const show=pre.style.display==='none';
+  pre.style.display=show?'block':'none';
+  btn.textContent=show?'📋 Dölj rapport':'📋 Visa full rapport';
+}
+
+function diskuteraDomare(){
+  const rep=window._lastDomarReport||{};
+  const feat=window._lastDomarFeature||'featuren';
+  const blockerare=(rep.blockerare||[]).map(b=>`- ${b.problem}`).join('\n')||'Se rapport';
+  const atgarder=(rep.prioriterad_atgardsplan||[]).map(a=>`${a.prioritet}. ${a.atgard}`).join('\n')||'';
+  const text=`Domaren rapporterade följande om "${feat}":\n\nBlockerare:\n${blockerare}\n\nÅtgärder:\n${atgarder}\n\nVad tycker du vi ska göra?`;
+  const inp=document.getElementById('chatInput');
+  inp.value=text;
+  inp.style.height='auto';
+  inp.style.height=Math.min(inp.scrollHeight,200)+'px';
+  inp.focus();
+}
 
 async function startBuildVerify(){
   if(!currentFeature)return;
