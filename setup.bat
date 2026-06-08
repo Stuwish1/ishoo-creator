@@ -23,7 +23,7 @@ echo [OK] Python hittades.
 :: Installera Python-paket
 echo.
 echo Installerar Python-paket...
-pip install anthropic fastapi uvicorn websockets python-dotenv --quiet
+pip install anthropic fastapi uvicorn websockets python-dotenv watchfiles --quiet
 
 if errorlevel 1 (
     echo [FEL] Kunde inte installera paket.

@@ -38,14 +38,20 @@ HAIKU_DEFAULT  = "claude-haiku-4-5-20251001"
 DEFAULT_AGENTS = [
     {"id":"security","name":"Säkerhetsansvarig","emoji":"🔒","model":"sonnet","enabled":True,
      "prompt":'Du är säkerhetsexpert för React/TypeScript/Supabase. Granska spec/kod för: SQL injection, XSS, exponerade nycklar, saknad RLS, felaktig auth. Returnera ENBART JSON: {"status":"GODKÄND"/"AVVISAD","findings":["..."],"severity":"LOW"/"MEDIUM"/"HIGH","suggestions":["..."]}'},
-    {"id":"dba","name":"DBA","emoji":"🗄️","model":"haiku","enabled":True,
+    {"id":"dba","name":"DBA","emoji":"🗄️","model":"ollama:qwen2.5-coder:7b","enabled":True,
      "prompt":'Du är databasexpert för PostgreSQL/Supabase. Granska för: farliga migrationer, saknade index, N+1, saknad RLS. Returnera ENBART JSON: {"status":"GODKÄND"/"AVVISAD","findings":["..."],"severity":"LOW"/"MEDIUM"/"HIGH","suggestions":["..."]}'},
-    {"id":"conflict","name":"Konfliktgranskare","emoji":"🔍","model":"haiku","enabled":True,
+    {"id":"conflict","name":"Konfliktgranskare","emoji":"🔍","model":"ollama:qwen2.5-coder:7b","enabled":True,
      "prompt":'Du är kodarkitekt. Granska för: duplicerad kod, namnkonflikter, brutna konventioner. Returnera ENBART JSON: {"status":"GODKÄND"/"AVVISAD","findings":["..."],"severity":"LOW"/"MEDIUM"/"HIGH","suggestions":["..."]}'},
     {"id":"ux","name":"UX + Buggletare","emoji":"🎨","model":"haiku","enabled":True,
      "prompt":'Du är UX-expert och buggletare. Granska mot acceptanskriterier, edge cases, loading states, tillgänglighet. Returnera ENBART JSON: {"status":"GODKÄND"/"AVVISAD","findings":["..."],"severity":"LOW"/"MEDIUM"/"HIGH","suggestions":["..."]}'},
     {"id":"architect","name":"Arkitektur","emoji":"🏗️","model":"sonnet","enabled":True,
      "prompt":'Du är mjukvaruarkitekt för React/TypeScript/Vite. Granska för: separation of concerns, hooks, prop drilling. Returnera ENBART JSON: {"status":"GODKÄND"/"AVVISAD","findings":["..."],"severity":"LOW"/"MEDIUM"/"HIGH","suggestions":["..."]}'},
+    {"id":"performance","name":"Prestandagranskare","emoji":"⚡","model":"ollama:qwen2.5-coder:7b","enabled":True,
+     "prompt":'Du är prestandaexpert för React/TypeScript/Vite. Granska för: onödiga re-renders, tunga beräkningar i render, saknad memoization, stora bundles, långsamma queries. Returnera ENBART JSON: {"status":"GODKÄND"/"AVVISAD","findings":["..."],"severity":"LOW"/"MEDIUM"/"HIGH","suggestions":["..."]}'},
+    {"id":"tester","name":"Testgranskare","emoji":"🧪","model":"ollama:qwen2.5-coder:7b","enabled":True,
+     "prompt":'Du är testexpert för React/TypeScript. Granska för: saknade edge case-tester, otestade felflöden, saknade tillgänglighetstester, bristande mockar. Returnera ENBART JSON: {"status":"GODKÄND"/"AVVISAD","findings":["..."],"severity":"LOW"/"MEDIUM"/"HIGH","suggestions":["..."]}'},
+    {"id":"mobile","name":"Mobilanvändare","emoji":"📱","model":"ollama:llama3.2:3b","enabled":True,
+     "prompt":'Du är en vardaglig mobilanvändare. Testa om featuren fungerar på liten skärm, med touch, långsamt nätverk, begränsat batteri. Returnera ENBART JSON: {"status":"GODKÄND"/"AVVISAD","findings":["..."],"severity":"LOW"/"MEDIUM"/"HIGH","suggestions":["..."]}'},
     {"id":"inspector","name":"Besiktningsman","emoji":"✅","model":"sonnet","enabled":True,"is_inspector":True,
      "prompt":'Du är besiktningsman. Bedöm om koden/specen är redo. Godkänn om inga HIGH-problem. Returnera ENBART JSON: {"status":"GODKÄND"/"AVVISAD","findings":["..."],"severity":"LOW"/"MEDIUM"/"HIGH","suggestions":["..."]}'},
     {"id":"business-logic","name":"Affärslogik","emoji":"🧠","model":"sonnet","enabled":True,
@@ -541,7 +547,13 @@ def run_agent(agent_def: dict, spec: str, memory: str, feedback: str = "", s: di
     model_key = agent_def.get("model","sonnet")
     # Ruta till Ollama om modellen borjar med "ollama:"
     if model_key.startswith("ollama:"):
-        return run_agent_ollama(agent_def, spec, memory, feedback)
+        result = run_agent_ollama(agent_def, spec, memory, feedback)
+        # Fallback till haiku om Ollama inte svarade korrekt
+        ollama_err = result.get("findings", [""])
+        if ollama_err and str(ollama_err[0]).startswith("Ollama-fel"):
+            fallback = dict(agent_def); fallback["model"] = "haiku"
+            return run_agent(fallback, spec, memory, feedback, s)
+        return result
     client_inst = get_client(s)
     if not client_inst:
         return {"agent":agent_def["name"],"id":agent_def["id"],"status":"GODKÄND","findings":["Demo-läge"],"severity":"LOW","suggestions":[]}
@@ -1295,6 +1307,25 @@ async def git_log():
             commits.append({"hash":parts[0],"message":parts[1],"author":parts[2],"ago":parts[3],"date":parts[4] if len(parts)>4 else ""})
     return JSONResponse({"commits":commits})
 
+@app.get("/api/git/status")
+async def git_status():
+    """Raknar ostaged + uncommitted + unpushed filer."""
+    try:
+        base = Path(".")
+        if not (base / ".git").exists():
+            return JSONResponse({"changed": 0, "unpushed": 0, "total": 0, "files": []})
+        r1 = subprocess.run(["git", "status", "--short"], cwd=str(base), capture_output=True, text=True)
+        lines = r1.stdout.strip().split("\n")
+        files = [l.strip() for l in lines if l.strip()]
+        changed = len(files)
+        r2 = subprocess.run(["git", "rev-list", "--count", "@{u}..HEAD"],
+                            cwd=str(base), capture_output=True, text=True)
+        unpushed = int(r2.stdout.strip()) if r2.returncode == 0 and r2.stdout.strip().isdigit() else 0
+        total = changed + unpushed
+        return JSONResponse({"changed": changed, "unpushed": unpushed, "total": total, "files": files[:20]})
+    except Exception as e:
+        return JSONResponse({"changed": 0, "unpushed": 0, "total": 0, "files": [], "error": str(e)})
+
 @app.post("/api/git/revert")
 async def git_revert(payload: dict):
     commit_hash = payload.get("hash","").strip()
@@ -1661,6 +1692,26 @@ async def git_push_to_github():
     await manager.broadcast({"type": "git_push_done", "url": f"https://github.com/Stuwish1/{repo_name}"})
     return JSONResponse({"ok": True, "url": f"https://github.com/Stuwish1/{repo_name}", "steps": steps})
 
+# ─── Hot-reload: bevaka index.html och skicka reload till browser ─────────────
+
+@app.on_event("startup")
+async def start_file_watcher():
+    """Bevakar index.html — skickar hot_reload via WS när filen ändras."""
+    import asyncio, os
+    async def _watch():
+        html_path = Path("index.html")
+        last_mtime = html_path.stat().st_mtime if html_path.exists() else 0
+        while True:
+            await asyncio.sleep(1)
+            try:
+                mtime = html_path.stat().st_mtime
+                if mtime != last_mtime:
+                    last_mtime = mtime
+                    await manager.broadcast({"type": "hot_reload", "file": "index.html"})
+            except Exception:
+                pass
+    asyncio.create_task(_watch())
+
 if __name__=="__main__":
     import uvicorn
     s = load_settings()
@@ -1674,5 +1725,5 @@ if __name__=="__main__":
     print(f"  Max iterationer: {s.get('max_iterations',3)}")
     print(f"  Agenter:         {len(s.get('agents', DEFAULT_AGENTS))}")
     print(f"{'='*55}\n")
-    uvicorn.run(app, host="0.0.0.0", port=8000, reload=False)
+    uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=True)
 

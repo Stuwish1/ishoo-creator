@@ -11,6 +11,8 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 /* HEADER */
 header{background:var(--surface);border-bottom:1px solid var(--border);padding:10px 16px;display:flex;align-items:center;gap:8px;flex-shrink:0;}
 header h1{font-size:14px;font-weight:700;margin-right:4px;}
+@keyframes pulse-dot{0%,100%{opacity:1}50%{opacity:.4}}
+#gitStatusDot{animation:pulse-dot 2s ease-in-out infinite;}
 .env-toggle{display:flex;gap:3px;}
 .env-btn{background:none;border:1px solid var(--border);border-radius:6px;color:var(--muted);font-size:11px;padding:3px 9px;cursor:pointer;font-family:inherit;transition:all .15s;}
 .env-btn.active-dev{background:rgba(34,197,94,.15);border-color:var(--green);color:var(--green);}
@@ -253,6 +255,10 @@ header h1{font-size:14px;font-weight:700;margin-right:4px;}
     <button class="env-btn" id="btnProd" onclick="setEnv('prod')">Prod</button>
   </div>
   <span class="hdr-badge dev" id="envBadge">dev-branch</span>
+  <button id="gitStatusBtn" onclick="quickPush()" title="Pushat ej ändringar" style="display:none;align-items:center;gap:5px;padding:3px 10px;border-radius:99px;border:1px solid rgba(245,158,11,.5);background:rgba(245,158,11,.12);color:#d97706;font-size:11px;font-weight:600;cursor:pointer;">
+    <span id="gitStatusDot" style="width:6px;height:6px;border-radius:50%;background:#f59e0b;display:inline-block;"></span>
+    <span id="gitStatusText">0 ej pushade</span>
+  </button>
   <div class="hdr-btns">
     <button class="icon-btn" title="Klistra in fel" onclick="openErrorModal()" style="font-size:13px;">🐛</button>
     <button class="icon-btn" title="Versionshistorik" onclick="openHistory()" style="font-size:13px;">🕐</button>
@@ -678,7 +684,20 @@ function connectWS(){
   ws=new WebSocket('ws://localhost:8000/ws');
   ws.onopen=()=>document.getElementById('connDot').classList.add('ok');
   ws.onclose=()=>{document.getElementById('connDot').classList.remove('ok');setTimeout(connectWS,3000);};
-  ws.onmessage=e=>handleWS(JSON.parse(e.data));
+  ws.onmessage=e=>{
+    const msg=JSON.parse(e.data);
+    if(msg.type==='hot_reload'){
+      // Visa toast-notis och ladda om sidan
+      const t=document.createElement('div');
+      t.style.cssText='position:fixed;bottom:20px;right:20px;background:#7c3aed;color:#fff;padding:8px 14px;border-radius:8px;font-size:12px;z-index:9999;opacity:0;transition:opacity .3s;';
+      t.textContent='🔄 Uppdaterar...';
+      document.body.appendChild(t);
+      requestAnimationFrame(()=>{t.style.opacity='1';});
+      setTimeout(()=>location.reload(),600);
+      return;
+    }
+    handleWS(msg);
+  };
 }
 
 function handleWS(msg){
@@ -1193,6 +1212,52 @@ async function loadHealth(){
     document.getElementById('healthBody').innerHTML=`<div style="color:var(--red);padding:16px;">Kunde inte nå servern: ${e}</div>`;
   }
 }
+
+// ─── Git status-polling ──────────────────────────────────────────────────────
+async function checkGitStatus(){
+  try{
+    const r=await fetch(`${API}/api/git/status`);
+    const d=await r.json();
+    const btn=document.getElementById('gitStatusBtn');
+    const txt=document.getElementById('gitStatusText');
+    if(!btn)return;
+    if(d.total>0){
+      btn.style.display='flex';
+      const parts=[];
+      if(d.changed>0) parts.push(`${d.changed} ändrad${d.changed>1?'e':''}`);
+      if(d.unpushed>0) parts.push(`${d.unpushed} commit${d.unpushed>1?'s':''}`);
+      txt.textContent=parts.join(' + ')+' ej pushad'+(d.total>1?'e':'');
+    }else{
+      btn.style.display='none';
+    }
+  }catch(e){}
+}
+
+async function quickPush(){
+  const btn=document.getElementById('gitStatusBtn');
+  const txt=document.getElementById('gitStatusText');
+  btn.style.pointerEvents='none';
+  txt.textContent='Pushar...';
+  try{
+    const r=await fetch(`${API}/api/git-push`,{method:'POST'});
+    const d=await r.json();
+    if(d.ok){
+      txt.textContent='✅ Pushad!';
+      setTimeout(()=>{btn.style.display='none';btn.style.pointerEvents='';},2000);
+    }else{
+      txt.textContent='❌ '+d.error.slice(0,40);
+      btn.style.pointerEvents='';
+      setTimeout(checkGitStatus,3000);
+    }
+  }catch(e){
+    txt.textContent='❌ Serverfel';
+    btn.style.pointerEvents='';
+  }
+}
+
+// Kör vid start och sedan var 30:e sekund
+setTimeout(checkGitStatus,2000);
+setInterval(checkGitStatus,30000);
 
 function openHealth(){
   document.getElementById('healthModal').classList.add('open');
