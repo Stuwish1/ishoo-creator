@@ -1,0 +1,12 @@
+{
+  "active": "ishoo-creator",
+  "projects": [
+    {
+      "id": "ishoo-creator",
+      "name": "Ishoo Creator",
+      "description": "AI-driven app builder med multi-agent review pipeline",
+      "github": "Stuwish1/ishoo-creator",
+      "created": "2026-06-08T21:41:11.624011"
+    }
+  ]
+}

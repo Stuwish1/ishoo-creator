@@ -1,0 +1,1672 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ishoo Creator</title>
+<style>
+:root{--bg:#0f1117;--surface:#1a1d27;--border:#2a2d3a;--text:#e2e8f0;--muted:#6b7280;--accent:#6366f1;--green:#22c55e;--yellow:#eab308;--red:#ef4444;--orange:#f97316;--blue:#3b82f6;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;height:100vh;display:flex;flex-direction:column;overflow:hidden;}
+/* HEADER */
+header{background:var(--surface);border-bottom:1px solid var(--border);padding:10px 16px;display:flex;align-items:center;gap:8px;flex-shrink:0;}
+header h1{font-size:14px;font-weight:700;margin-right:4px;}
+.env-toggle{display:flex;gap:3px;}
+.env-btn{background:none;border:1px solid var(--border);border-radius:6px;color:var(--muted);font-size:11px;padding:3px 9px;cursor:pointer;font-family:inherit;transition:all .15s;}
+.env-btn.active-dev{background:rgba(34,197,94,.15);border-color:var(--green);color:var(--green);}
+.env-btn.active-prod{background:rgba(239,68,68,.15);border-color:var(--red);color:var(--red);}
+.hdr-badge{font-size:10px;padding:2px 7px;border-radius:99px;font-weight:600;}
+.hdr-badge.dev{background:rgba(34,197,94,.2);color:var(--green);}
+.hdr-badge.prod{background:rgba(239,68,68,.2);color:var(--red);}
+.hdr-btns{margin-left:auto;display:flex;gap:6px;align-items:center;}
+.conn-dot{width:8px;height:8px;border-radius:50%;background:var(--red);transition:background .3s;}
+.conn-dot.ok{background:var(--green);box-shadow:0 0 5px var(--green);}
+/* LAYOUT */
+.layout{display:grid;grid-template-columns:220px 1fr 270px;flex:1;overflow:hidden;min-height:0;}
+/* PREVIEW MODAL */
+.preview-overlay{position:fixed;inset:0;background:rgba(0,0,0,.8);display:none;flex-direction:column;z-index:150;backdrop-filter:blur(4px);}
+.preview-overlay.open{display:flex;}
+.preview-bar{background:var(--surface);border-bottom:1px solid var(--border);padding:8px 14px;display:flex;align-items:center;gap:10px;flex-shrink:0;}
+.preview-url{font-size:11px;font-family:monospace;color:var(--muted);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.preview-tabs{display:flex;gap:4px;}
+.prev-tab{background:none;border:1px solid var(--border);border-radius:6px;color:var(--muted);font-size:11px;padding:3px 10px;cursor:pointer;font-family:inherit;transition:all .15s;}
+.prev-tab.active-dev{background:rgba(34,197,94,.15);border-color:var(--green);color:var(--green);}
+.prev-tab.active-prod{background:rgba(239,68,68,.15);border-color:var(--red);color:var(--red);}
+.preview-frame{flex:1;border:none;background:#fff;}
+.preview-empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;color:var(--muted);}
+.preview-empty h2{font-size:16px;color:var(--text);}
+.preview-empty p{font-size:13px;max-width:380px;text-align:center;line-height:1.6;}
+/* SIDEBAR */
+.sidebar{background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;}
+.sec-hdr{padding:8px 12px 4px;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;}
+.icon-btn{background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;padding:2px 5px;border-radius:4px;transition:all .15s;}
+.icon-btn:hover{color:var(--text);background:rgba(255,255,255,.06);}
+.project-item{padding:8px 12px;cursor:pointer;border-left:3px solid transparent;display:flex;align-items:center;gap:5px;transition:background .12s;}
+.project-item:hover{background:rgba(255,255,255,.04);}
+.project-item.active{border-left-color:var(--accent);background:rgba(99,102,241,.1);}
+.p-name{font-size:12px;font-weight:500;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.p-sub{font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.del-btn{opacity:0;background:none;border:none;color:var(--muted);cursor:pointer;font-size:12px;padding:2px 4px;border-radius:3px;}
+.project-item:hover .del-btn{opacity:1;}
+.del-btn:hover{color:var(--red)!important;background:rgba(239,68,68,.1);}
+.divider{height:1px;background:var(--border);flex-shrink:0;}
+/* SIDEBAR TABS */
+.sb-tabs{display:flex;border-bottom:1px solid var(--border);flex-shrink:0;}
+.sb-tab{flex:1;background:none;border:none;color:var(--muted);font-size:11px;padding:7px;cursor:pointer;font-family:inherit;border-bottom:2px solid transparent;transition:all .15s;}
+.sb-tab:hover{color:var(--text);}
+.sb-tab.active{color:var(--accent);border-bottom-color:var(--accent);}
+.sb-panel{flex:1;overflow-y:auto;display:none;}
+.sb-panel.active{display:flex;flex-direction:column;}
+/* PHASE TABS */
+.phase-tabs{display:flex;gap:3px;padding:6px 8px;flex-shrink:0;border-bottom:1px solid var(--border);}
+.phase-tab{flex:1;background:none;border:1px solid var(--border);border-radius:5px;color:var(--muted);font-size:10px;padding:3px;cursor:pointer;font-family:inherit;text-align:center;transition:all .15s;}
+.phase-tab.active{background:var(--accent);border-color:var(--accent);color:#fff;}
+.feature-list{flex:1;overflow-y:auto;}
+.f-item{padding:7px 12px;font-size:12px;display:flex;align-items:center;gap:6px;border-bottom:1px solid rgba(42,45,58,.4);}
+.f-name{flex:1;color:var(--text);line-height:1.3;}
+.f-phase{font-size:9px;padding:1px 4px;border-radius:3px;font-weight:700;background:rgba(99,102,241,.2);color:var(--accent);}
+.f-badge{font-size:10px;padding:1px 6px;border-radius:99px;font-weight:600;white-space:nowrap;}
+.fb-planerad{background:rgba(107,114,128,.2);color:var(--muted);}
+.fb-granskas{background:rgba(234,179,8,.15);color:var(--yellow);}
+.fb-klar{background:rgba(34,197,94,.15);color:var(--green);}
+.fb-i-dev{background:rgba(99,102,241,.2);color:var(--accent);}
+/* QUEUE */
+.queue-item{padding:7px 12px;font-size:12px;display:flex;align-items:center;gap:6px;border-bottom:1px solid rgba(42,45,58,.4);cursor:default;}
+.qi-name{flex:1;color:var(--text);}
+.qi-phase{font-size:9px;padding:1px 4px;border-radius:3px;font-weight:700;background:rgba(249,115,22,.2);color:var(--orange);}
+.qi-del{background:none;border:none;color:var(--muted);cursor:pointer;font-size:12px;padding:2px 4px;border-radius:3px;opacity:0;}
+.queue-item:hover .qi-del{opacity:1;}
+.qi-del:hover{color:var(--red)!important;}
+/* PHASE PROGRESS */
+.phase-progress{padding:7px 12px;border-top:1px solid var(--border);flex-shrink:0;}
+.pr-row{display:flex;align-items:center;gap:6px;margin-bottom:3px;}
+.pr-lbl{font-size:10px;color:var(--muted);width:26px;}
+.pr-bar{flex:1;height:3px;background:var(--border);border-radius:2px;overflow:hidden;}
+.pr-fill{height:100%;border-radius:2px;transition:width .4s;}
+.fill-mvp{background:var(--accent);}
+.fill-v1{background:var(--orange);}
+.fill-v2{background:var(--muted);}
+.pr-cnt{font-size:10px;color:var(--muted);width:28px;text-align:right;}
+/* CHAT */
+.chat-area{display:flex;flex-direction:column;overflow:hidden;min-height:0;}
+.chat-topbar{padding:10px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;flex-shrink:0;}
+.avatar{width:30px;height:30px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;}
+.chat-topbar h2{font-size:13px;font-weight:600;}
+.chat-topbar p{font-size:11px;color:var(--muted);}
+.messages{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px;min-height:0;}
+.msg{max-width:78%;}
+.msg.user{align-self:flex-end;}
+.msg.assistant{align-self:flex-start;}
+.msg-bubble{padding:10px 13px;border-radius:14px;font-size:13px;line-height:1.6;}
+.msg.user .msg-bubble{background:var(--accent);color:#fff;border-bottom-right-radius:3px;}
+.msg.assistant .msg-bubble{background:var(--surface);border:1px solid var(--border);border-bottom-left-radius:3px;}
+.msg-time{font-size:10px;color:var(--muted);margin-top:2px;text-align:right;}
+.msg.assistant .msg-time{text-align:left;}
+.typing span{display:inline-block;width:5px;height:5px;background:var(--muted);border-radius:50%;margin:0 2px;animation:bounce .9s infinite;}
+.typing span:nth-child(2){animation-delay:.15s;}
+.typing span:nth-child(3){animation-delay:.3s;}
+/* SUGGESTIONS */
+.suggestions-bar{padding:8px 14px;border-top:1px solid var(--border);background:rgba(99,102,241,.04);flex-shrink:0;}
+.sug-label{font-size:10px;color:var(--muted);margin-bottom:5px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;}
+.sug-chips{display:flex;flex-wrap:wrap;gap:5px;}
+.sug-chip{background:none;border:1px solid var(--border);border-radius:99px;color:var(--text);font-size:11px;padding:3px 10px;cursor:pointer;font-family:inherit;transition:all .15s;display:flex;align-items:center;gap:4px;}
+.sug-chip:hover{border-color:var(--accent);color:var(--accent);background:rgba(99,102,241,.08);}
+.sug-chip .sug-phase{font-size:9px;color:var(--muted);}
+/* SYSTEM CONFIG BANNER */
+.syscfg-bar{padding:8px 14px;border-top:1px solid var(--border);background:rgba(59,130,246,.06);flex-shrink:0;display:none;}
+.syscfg-bar.show{display:block;}
+.syscfg-label{font-size:11px;color:var(--blue);margin-bottom:6px;font-weight:600;}
+.syscfg-desc{font-size:12px;color:var(--muted);margin-bottom:8px;}
+/* ACTION BAR */
+.action-bar{padding:9px 14px;border-top:1px solid var(--border);display:flex;gap:7px;flex-shrink:0;flex-wrap:wrap;align-items:center;}
+.action-bar.hidden{display:none;}
+.action-label{font-size:11px;color:var(--muted);flex:1;}
+.btn{border:none;border-radius:8px;font-size:12px;padding:7px 14px;cursor:pointer;font-family:inherit;font-weight:500;transition:opacity .15s;}
+.btn:hover{opacity:.85;}
+.btn:disabled{opacity:.35;cursor:not-allowed;}
+.btn-primary{background:var(--accent);color:#fff;}
+.btn-green{background:rgba(34,197,94,.9);color:#fff;}
+.btn-red{background:rgba(239,68,68,.9);color:#fff;}
+.btn-blue{background:rgba(59,130,246,.9);color:#fff;}
+.btn-outline{background:none;border:1px solid var(--border);color:var(--muted);}
+.btn-outline:hover{color:var(--text);border-color:var(--text);}
+/* CHAT INPUT */
+.chat-input-area{padding:10px 14px;border-top:1px solid var(--border);display:flex;gap:8px;flex-shrink:0;}
+.chat-input{flex:1;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:9px 12px;color:var(--text);font-size:13px;resize:none;height:40px;outline:none;font-family:inherit;transition:border-color .2s;}
+.chat-input:focus{border-color:var(--accent);}
+.send-btn{background:var(--accent);border:none;border-radius:10px;width:40px;height:40px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.send-btn:hover{opacity:.85;}
+.send-btn:disabled{opacity:.35;cursor:not-allowed;}
+.send-btn svg{width:16px;height:16px;fill:#fff;}
+/* AGENT PANEL */
+.agent-panel{background:var(--surface);border-left:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;min-height:0;}
+.panel-tabs{display:flex;border-bottom:1px solid var(--border);flex-shrink:0;}
+.panel-tab{flex:1;background:none;border:none;color:var(--muted);font-size:11px;padding:8px;cursor:pointer;font-family:inherit;border-bottom:2px solid transparent;transition:all .15s;}
+.panel-tab.active{color:var(--accent);border-bottom-color:var(--accent);}
+.panel-content{flex:1;overflow-y:auto;min-height:0;display:none;}
+.panel-content.active{display:flex;flex-direction:column;}
+.iter-badge{font-size:10px;background:rgba(99,102,241,.2);color:var(--accent);padding:1px 7px;border-radius:99px;}
+.agent-row{padding:8px 12px;border-bottom:1px solid rgba(42,45,58,.4);}
+.agent-row-top{display:flex;align-items:center;gap:6px;}
+.agent-name{font-size:12px;font-weight:500;flex:1;}
+.s-pill{font-size:10px;padding:2px 7px;border-radius:99px;font-weight:600;}
+.s-waiting{background:rgba(107,114,128,.2);color:var(--muted);}
+.s-running{background:rgba(234,179,8,.15);color:var(--yellow);animation:pulse 1.2s infinite;}
+.s-approved{background:rgba(34,197,94,.15);color:var(--green);}
+.s-rejected{background:rgba(239,68,68,.15);color:var(--red);}
+.agent-findings{margin-top:4px;}
+.finding{font-size:11px;color:var(--muted);padding:1px 0;line-height:1.4;}
+.finding::before{content:"· ";}
+.pipe-footer{padding:9px 12px;border-top:1px solid var(--border);flex-shrink:0;}
+.pipe-bar{height:3px;background:var(--border);border-radius:2px;overflow:hidden;}
+.pipe-fill{height:100%;background:var(--accent);border-radius:2px;transition:width .4s;}
+.pipe-label{font-size:10px;color:var(--muted);margin-top:4px;text-align:center;}
+/* ARCHITECTURE PANEL */
+.arch-content{flex:1;padding:10px 12px;overflow-y:auto;}
+.arch-content pre{font-size:11px;font-family:monospace;line-height:1.6;color:var(--muted);white-space:pre-wrap;word-break:break-word;}
+.arch-actions{padding:8px 12px;border-top:1px solid var(--border);display:flex;gap:6px;flex-shrink:0;}
+/* DIFF MODAL */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);display:none;align-items:flex-start;justify-content:center;z-index:100;backdrop-filter:blur(4px);padding:16px;overflow-y:auto;}
+.modal-overlay.open{display:flex;}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:12px;width:100%;max-width:860px;display:flex;flex-direction:column;max-height:92vh;}
+.modal-head{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-shrink:0;}
+.modal-head h2{font-size:14px;font-weight:600;flex:1;}
+.modal-body{flex:1;overflow-y:auto;}
+.diff-file{border-bottom:1px solid var(--border);}
+.diff-file-hdr{padding:9px 14px;display:flex;align-items:center;gap:8px;cursor:pointer;}
+.diff-file-hdr:hover{background:rgba(255,255,255,.02);}
+.diff-file-path{font-size:11px;font-family:monospace;flex:1;}
+.diff-action{font-size:10px;padding:1px 7px;border-radius:5px;font-weight:600;}
+.da-create{background:rgba(34,197,94,.2);color:var(--green);}
+.da-modify{background:rgba(99,102,241,.2);color:var(--accent);}
+.da-delete{background:rgba(239,68,68,.2);color:var(--red);}
+.diff-stats{font-size:11px;color:var(--muted);}
+.diff-content{display:none;background:var(--bg);overflow-x:auto;}
+.diff-content.open{display:block;}
+.diff-line{display:flex;font-size:11px;font-family:monospace;line-height:1.5;}
+.diff-line-num{width:34px;text-align:right;padding:0 6px;color:var(--muted);user-select:none;flex-shrink:0;border-right:1px solid var(--border);}
+.diff-line-content{padding:0 10px;white-space:pre;flex:1;}
+.dl-add{background:rgba(34,197,94,.08);}
+.dl-add .diff-line-content{color:#86efac;}
+.dl-del{background:rgba(239,68,68,.08);}
+.dl-del .diff-line-content{color:#fca5a5;}
+.dl-hunk .diff-line-content{color:var(--muted);font-style:italic;}
+.dl-ctx{opacity:.55;}
+.modal-foot{padding:12px 18px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end;flex-shrink:0;}
+/* SETTINGS MODAL */
+.settings-overlay{position:fixed;inset:0;background:rgba(0,0,0,.72);display:none;align-items:flex-start;justify-content:center;z-index:200;backdrop-filter:blur(4px);padding:16px;overflow-y:auto;}
+.settings-overlay.open{display:flex;}
+.settings-modal{background:var(--surface);border:1px solid var(--border);border-radius:12px;width:100%;max-width:700px;display:flex;flex-direction:column;max-height:92vh;}
+.settings-head{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;flex-shrink:0;}
+.settings-head h2{font-size:14px;font-weight:600;flex:1;}
+.settings-tabs{display:flex;border-bottom:1px solid var(--border);flex-shrink:0;}
+.stab{flex:1;background:none;border:none;color:var(--muted);font-size:12px;padding:9px;cursor:pointer;font-family:inherit;border-bottom:2px solid transparent;transition:all .15s;}
+.stab.active{color:var(--accent);border-bottom-color:var(--accent);}
+.settings-body{flex:1;overflow-y:auto;padding:18px;}
+.settings-section{display:none;}
+.settings-section.active{display:block;}
+.form-group{margin-bottom:14px;}
+.form-group label{display:block;font-size:11px;color:var(--muted);margin-bottom:4px;font-weight:500;}
+.form-group input,.form-group select,.form-group textarea{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 11px;color:var(--text);font-size:13px;outline:none;font-family:inherit;transition:border-color .2s;}
+.form-group input:focus,.form-group select:focus,.form-group textarea:focus{border-color:var(--accent);}
+.form-group textarea{resize:vertical;min-height:80px;font-size:12px;}
+.form-group select{cursor:pointer;}
+.form-group small{display:block;font-size:11px;color:var(--muted);margin-top:3px;}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.settings-foot{padding:12px 18px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end;flex-shrink:0;}
+/* AGENT EDITOR */
+.agent-card{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:8px;}
+.agent-card-top{display:flex;align-items:center;gap:8px;}
+.agent-card-name{font-size:12px;font-weight:500;flex:1;}
+.agent-toggle{position:relative;width:32px;height:18px;flex-shrink:0;}
+.agent-toggle input{opacity:0;width:0;height:0;}
+.agent-toggle-slider{position:absolute;inset:0;background:var(--border);border-radius:99px;cursor:pointer;transition:.2s;}
+.agent-toggle input:checked + .agent-toggle-slider{background:var(--accent);}
+.agent-toggle-slider::before{content:'';position:absolute;width:14px;height:14px;left:2px;top:2px;background:#fff;border-radius:50%;transition:.2s;}
+.agent-toggle input:checked + .agent-toggle-slider::before{transform:translateX(14px);}
+.agent-card-edit{font-size:11px;color:var(--muted);background:none;border:1px solid var(--border);border-radius:5px;padding:2px 8px;cursor:pointer;font-family:inherit;}
+.agent-card-edit:hover{color:var(--text);border-color:var(--text);}
+.agent-card-del{font-size:11px;color:var(--muted);background:none;border:1px solid var(--border);border-radius:5px;padding:2px 8px;cursor:pointer;font-family:inherit;}
+.agent-card-del:hover{color:var(--red);border-color:var(--red);}
+.agent-card-body{margin-top:8px;display:none;}
+.agent-card-body.open{display:block;}
+.agent-model-badge{font-size:10px;padding:1px 6px;border-radius:99px;background:rgba(99,102,241,.15);color:var(--accent);margin-left:6px;}
+/* NEW PROJECT */
+.np-overlay{position:fixed;inset:0;background:rgba(0,0,0,.65);display:none;align-items:center;justify-content:center;z-index:300;backdrop-filter:blur(4px);}
+.np-overlay.open{display:flex;}
+.np-modal{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:22px;width:420px;max-width:92vw;}
+.np-modal h2{font-size:15px;font-weight:600;margin-bottom:16px;}
+.modal-btns{display:flex;gap:8px;justify-content:flex-end;margin-top:16px;}
+.btn-cancel{background:none;border:1px solid var(--border);border-radius:8px;color:var(--muted);padding:7px 14px;font-size:12px;cursor:pointer;font-family:inherit;}
+.btn-cancel:hover{color:var(--text);border-color:var(--text);}
+::-webkit-scrollbar{width:3px;}::-webkit-scrollbar-track{background:transparent;}::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:.5;}}
+@keyframes bounce{0%,100%{transform:translateY(0);}50%{transform:translateY(-4px);}}
+</style>
+</head>
+<body>
+<header>
+  <span style="font-size:16px">⚡</span>
+  <h1>Ishoo Creator</h1>
+  <div class="env-toggle">
+    <button class="env-btn active-dev" id="btnDev" onclick="setEnv('dev')">Dev</button>
+    <button class="env-btn" id="btnProd" onclick="setEnv('prod')">Prod</button>
+  </div>
+  <span class="hdr-badge dev" id="envBadge">dev-branch</span>
+  <div class="hdr-btns">
+    <button class="icon-btn" title="Klistra in fel" onclick="openErrorModal()" style="font-size:13px;">🐛</button>
+    <button class="icon-btn" title="Versionshistorik" onclick="openHistory()" style="font-size:13px;">🕐</button>
+    <button class="icon-btn" title="Preview" onclick="openPreview()">🖥️</button>
+    <button class="icon-btn" title="Systemstatus" onclick="openHealth()" id="healthBtn">🟢</button>
+      <button class="icon-btn" title="Inställningar" onclick="openSettings()">⚙️</button>
+    <div class="conn-dot" id="connDot" title="WebSocket"></div>
+  </div>
+</header>
+
+<div class="layout">
+<!-- ═══ VÄNSTER SIDEBAR ═══ -->
+<div class="sidebar">
+  <div class="sec-hdr">Projekt <button class="icon-btn" onclick="openNewProject()">+</button></div>
+  <div id="projectList"></div>
+  <div class="divider"></div>
+  <div class="sb-tabs">
+    <button class="sb-tab active" onclick="setSbTab('features',this)">Features</button>
+    <button class="sb-tab" onclick="setSbTab('queue',this)">Kö <span id="queueCount" style="font-size:9px;"></span></button>
+  </div>
+  <div class="sb-panel active" id="panel-features">
+    <div class="phase-tabs">
+      <button class="phase-tab active" onclick="setPhase('all',this)">Alla</button>
+      <button class="phase-tab" onclick="setPhase('MVP',this)">MVP</button>
+      <button class="phase-tab" onclick="setPhase('v1',this)">v1</button>
+      <button class="phase-tab" onclick="setPhase('v2',this)">v2</button>
+    </div>
+    <div class="feature-list" id="featureList"></div>
+    <div class="phase-progress" id="phaseProgress"></div>
+  </div>
+  <div class="sb-panel" id="panel-queue">
+    <div id="queueList" style="flex:1;overflow-y:auto;"></div>
+    <div style="padding:8px 12px;border-top:1px solid var(--border);font-size:11px;color:var(--muted);">
+      Klicka på ett objekt för att börja jobba med det
+    </div>
+  </div>
+</div>
+
+<!-- ═══ CHATT ═══ -->
+<div class="chat-area">
+  <div class="chat-topbar">
+    <div class="avatar">👷</div>
+    <div><h2>Projektledaren</h2><p id="activeLabel">Välj eller skapa ett projekt</p></div>
+  </div>
+  <div class="messages" id="messages">
+    <div class="msg assistant">
+      <div class="msg-bubble">Välkommen till <strong>Ishoo Creator!</strong><br><br>
+      Skapa ett projekt med <strong>+</strong> och berätta vad du vill bygga.<br><br>
+      💡 <em>Tips: Du kan också säga "Lägg till en agent som kollar X" eller "Ändra max iterationer" — jag hjälper dig konfigurera systemet också.</em></div>
+      <div class="msg-time">Nu</div>
+    </div>
+  </div>
+
+  <!-- SUGGESTIONS BAR (visas efter [FEATURE_KLAR]) -->
+  <div class="suggestions-bar" id="suggestionsBar" style="display:none;">
+    <div class="sug-label">💡 Föreslagna relaterade features — lägg till i kö</div>
+    <div class="sug-chips" id="sugChips"></div>
+  </div>
+
+  <!-- SYSTEM CONFIG BANNER -->
+  <div class="syscfg-bar" id="syscfgBar">
+    <div class="syscfg-label">🔧 Systemkonfiguration identifierad</div>
+    <div class="syscfg-desc" id="syscfgDesc"></div>
+    <div style="display:flex;gap:6px;">
+      <button class="btn btn-blue" id="syscfgApplyBtn" onclick="applySystemConfig()">Applicera nu</button>
+      <button class="btn btn-outline" onclick="dismissSysCfg()">Avfärda</button>
+    </div>
+  </div>
+
+  <!-- ACTION BAR -->
+  <div class="action-bar hidden" id="actionBar">
+    <span class="action-label" id="actionLabel"></span>
+    <button class="btn btn-primary" id="actionBtn1" onclick="handleAction1()"></button>
+    <button class="btn btn-outline" id="actionBtn2" onclick="handleAction2()"></button>
+  </div>
+
+  <div class="chat-input-area">
+    <textarea class="chat-input" id="chatInput" placeholder="Berätta vad du vill bygga, eller 'Lägg till en agent som...'"></textarea>
+    <button class="send-btn" id="sendBtn" onclick="sendMessage()">
+      <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+    </button>
+  </div>
+</div>
+
+<!-- ═══ HÖGER PANEL ═══ -->
+<div class="agent-panel">
+  <div class="panel-tabs">
+    <button class="panel-tab active" onclick="setPanelTab('agents',this)">Agenter</button>
+    <button class="panel-tab" onclick="setPanelTab('arch',this)">Arkitektur</button>
+  </div>
+  <div class="panel-content active" id="pc-agents" style="flex-direction:column;">
+    <div style="padding:6px 12px 2px;display:flex;align-items:center;gap:6px;flex-shrink:0;">
+      <span style="font-size:10px;color:var(--muted);flex:1;">PIPELINE</span>
+      <span class="iter-badge" id="iterBadge">–</span>
+    </div>
+    <div style="flex:1;overflow-y:auto;" id="agentList"></div>
+    <div class="pipe-footer">
+      <div class="pipe-bar"><div class="pipe-fill" id="pipeFill" style="width:0%"></div></div>
+      <div class="pipe-label" id="pipeLabel">Väntar...</div>
+    </div>
+  </div>
+  <div class="panel-content" id="pc-arch">
+    <div class="arch-content"><pre id="archText" style="color:var(--muted);font-size:11px;">Ingen arkitekturkarta ännu.\nKlona repot och klicka "Generera".</pre></div>
+    <div class="arch-actions">
+      <button class="btn btn-outline" style="flex:1;font-size:11px;" onclick="generateArch()">⚡ Generera</button>
+      <button class="btn btn-outline" style="font-size:11px;" onclick="editArch()">✏️ Redigera</button>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- ═══ DIFF MODAL ═══ -->
+<div class="modal-overlay" id="diffModal">
+  <div class="modal">
+    <div class="modal-head">
+      <h2 id="diffTitle">Kodgranskning</h2>
+      <span class="hdr-badge dev" id="diffEnvBadge">dev-branch</span>
+      <button class="icon-btn" style="margin-left:auto" onclick="closeDiff()">✕</button>
+    </div>
+    <div class="modal-body" id="diffBody"></div>
+    <div class="modal-foot">
+      <button class="btn btn-outline" onclick="rejectBuild()">Avvisa — bygg om</button>
+      <button class="btn btn-outline" id="verifyBuildBtn" onclick="startBuildVerify()" style="background:rgba(245,158,11,.12);border-color:rgba(245,158,11,.4);color:#d97706;">🔍 Verifiera bygget</button>
+      <button class="btn btn-green" id="confirmPushBtn" onclick="confirmPush()">Godkänn &amp; Pusha till <span id="pushTarget">dev</span></button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ HEALTH MODAL ═══ -->
+<div class="modal-overlay" id="healthModal">
+  <div class="modal" style="max-width:520px;">
+    <div class="modal-head">
+      <h3>🔍 Systemstatus</h3>
+      <button class="icon-btn" onclick="closeHealth()">✕</button>
+    </div>
+    <div class="modal-body" id="healthBody" style="padding:16px;">
+      <div style="text-align:center;color:var(--muted);padding:20px;">Kontrollerar systemet...</div>
+    </div>
+    <div class="modal-foot" style="justify-content:space-between;">
+      <span style="font-size:11px;color:var(--muted);">Klicka Kontrollera igen för att uppdatera</span>
+      <button class="btn btn-primary" onclick="loadHealth()">🔄 Kontrollera igen</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ SETTINGS MODAL ═══ -->
+<div class="settings-overlay" id="settingsModal">
+  <div class="settings-modal">
+    <div class="settings-head">
+      <h2>⚙️ Inställningar</h2>
+      <button class="icon-btn" onclick="closeSettings()">✕</button>
+    </div>
+    <div class="settings-tabs">
+      <button class="stab active" onclick="setStab('general',this)">Allmänt</button>
+      <button class="stab" onclick="setStab('agents',this)">Agenter</button>
+      <button class="stab" onclick="setStab('project',this)">Projekt</button>
+    </div>
+    <div class="settings-body">
+      <!-- ALLMÄNT -->
+      <div class="settings-section active" id="ss-general">
+        <div class="form-group">
+          <label>Anthropic API-nyckel</label>
+          <input type="password" id="s-api-key" placeholder="sk-ant-...">
+          <small>Hämta från console.anthropic.com</small>
+        </div>
+        <div class="form-group">
+          <label>GitHub Personal Access Token</label>
+          <input type="password" id="s-github-token" placeholder="ghp_...">
+          <small>Behövs för Snickaren — repo-läsning och push. Skapa på github.com/settings/tokens</small>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Git-namn</label>
+            <input type="text" id="s-git-name" placeholder="Ishoo Creator">
+          </div>
+          <div class="form-group">
+            <label>Git-e-post</label>
+            <input type="text" id="s-git-email" placeholder="creator@ishoo.se">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Dev-branch</label>
+            <input type="text" id="s-dev-branch" placeholder="dev">
+          </div>
+          <div class="form-group">
+            <label>Prod-branch</label>
+            <input type="text" id="s-prod-branch" placeholder="main">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Max iterationer (1–5)</label>
+            <input type="number" id="s-max-iter" min="1" max="5" value="3">
+          </div>
+          <div class="form-group">
+            <label>Projektledare-modell</label>
+            <select id="s-model-pl">
+              <option value="claude-sonnet-4-6">claude-sonnet-4-6 (Bäst)</option>
+              <option value="claude-haiku-4-5-20251001">claude-haiku-4-5-20251001 (Snabb)</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Snickare-modell</label>
+            <select id="s-model-snickare">
+              <option value="claude-sonnet-4-6">claude-sonnet-4-6 (Rekommenderas)</option>
+              <option value="claude-haiku-4-5-20251001">claude-haiku-4-5-20251001</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Haiku-alias (för agenter)</label>
+            <select id="s-model-haiku">
+              <option value="claude-haiku-4-5-20251001">claude-haiku-4-5-20251001</option>
+              <option value="claude-sonnet-4-6">claude-sonnet-4-6</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- AGENTER -->
+      <div class="settings-section" id="ss-agents">
+        <div id="agentCards"></div>
+        <button class="btn btn-outline" style="width:100%;margin-top:8px;font-size:12px;" onclick="addNewAgent()">+ Lägg till agent</button>
+        <!-- Ny agent form (dold) -->
+        <div id="newAgentForm" style="display:none;margin-top:12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;">
+          <div class="form-row">
+            <div class="form-group"><label>Emoji</label><input type="text" id="na-emoji" value="🤖" style="width:60px;"></div>
+            <div class="form-group"><label>Namn</label><input type="text" id="na-name" placeholder="Min agent"></div>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label>Modell</label>
+              <select id="na-model"><option value="haiku">Haiku (snabb)</option><option value="sonnet">Sonnet (bäst)</option></select>
+            </div>
+            <div class="form-group"><label>Typ</label>
+              <select id="na-type"><option value="regular">Granskare</option><option value="inspector">Besiktningsman</option></select>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>System-prompt</label>
+            <textarea id="na-prompt" placeholder='Du är... Returnera ENBART JSON: {"status":"GODKÄND"/"AVVISAD","findings":[...],"severity":"LOW"/"MEDIUM"/"HIGH","suggestions":[]}'></textarea>
+          </div>
+          <div style="display:flex;gap:6px;justify-content:flex-end;margin-top:6px;">
+            <button class="btn-cancel" onclick="document.getElementById('newAgentForm').style.display='none'">Avbryt</button>
+            <button class="btn btn-primary" onclick="saveNewAgent()">Spara agent</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- PROJEKT -->
+      <div class="settings-section" id="ss-project">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:12px;background:rgba(99,102,241,.06);padding:8px 10px;border-radius:6px;border-left:3px solid var(--accent);">
+          Dev och Prod använder <strong>separata Supabase-projekt</strong> — koden skriver aldrig produktionsdatabasen direkt.
+        </div>
+        <div class="form-group">
+          <label>GitHub-repo (aktivt projekt)</label>
+          <input type="text" id="ps-github" placeholder="Stuwish1/mitt-projekt">
+        </div>
+        <div style="font-size:11px;font-weight:600;color:var(--green);margin:12px 0 8px;">🟢 Dev-miljö</div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Supabase Dev URL</label>
+            <input type="text" id="ps-supa-dev-url" placeholder="https://xxx.supabase.co">
+          </div>
+          <div class="form-group">
+            <label>Supabase Dev Anon Key</label>
+            <input type="password" id="ps-supa-dev-key" placeholder="eyJ...">
+          </div>
+        </div>
+        <div style="font-size:11px;font-weight:600;color:var(--red);margin:12px 0 8px;">🔴 Prod-miljö</div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Supabase Prod URL</label>
+            <input type="text" id="ps-supa-prod-url" placeholder="https://yyy.supabase.co">
+          </div>
+          <div class="form-group">
+            <label>Supabase Prod Anon Key</label>
+            <input type="password" id="ps-supa-prod-key" placeholder="eyJ...">
+          </div>
+        </div>
+        <div style="font-size:11px;color:var(--muted);margin-top:4px;">Env-filer (.env.development och .env.production) skapas automatiskt i repot när Snickaren klonar.</div>
+
+        <div style="height:1px;background:var(--border);margin:16px 0;"></div>
+        <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:10px;">🖥️ Vercel Preview</div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:10px;background:rgba(34,197,94,.05);padding:8px 10px;border-radius:6px;border-left:3px solid var(--green);">
+          Koppla Vercel → automatisk preview efter varje push. Dev-branch → preview-URL, Main → produktions-URL.
+          <br>Token: <a href="https://vercel.com/account/tokens" target="_blank" style="color:var(--accent);">vercel.com/account/tokens</a>
+        </div>
+        <div class="form-group">
+          <label>Vercel API Token</label>
+          <input type="password" id="ps-vercel-token" placeholder="xxxxxxxxxxxxxxxxxxxxxx">
+          <small>Skapas under Account Settings → Tokens på vercel.com</small>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Vercel Projekt-ID eller namn</label>
+            <input type="text" id="ps-vercel-project" placeholder="prj_xxxxx eller mitt-projekt">
+            <small>Finns i Vercel → projekt → Settings</small>
+          </div>
+          <div class="form-group">
+            <label>Vercel Team ID (valfritt)</label>
+            <input type="text" id="ps-vercel-team" placeholder="team_xxxxx">
+            <small>Lämna tomt för personliga konton</small>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="settings-foot">
+      <button class="btn-cancel" onclick="closeSettings()">Stäng</button>
+      <button class="btn btn-primary" onclick="saveSettings()">Spara inställningar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ PREVIEW MODAL ═══ -->
+<div class="preview-overlay" id="previewModal">
+  <div class="preview-bar">
+    <div class="preview-tabs">
+      <button class="prev-tab" id="prevBtnLocal" onclick="switchPreview('local')">💻 Lokal</button>
+      <button class="prev-tab active-dev" id="prevBtnDev" onclick="switchPreview('dev')">🟢 Dev</button>
+      <button class="prev-tab" id="prevBtnProd" onclick="switchPreview('prod')">🔴 Prod</button>
+    </div>
+    <span class="preview-url" id="previewUrl">Laddar URL...</span>
+    <div style="display:flex;gap:4px;margin-left:auto;">
+      <div style="display:flex;gap:3px;border:1px solid var(--border);border-radius:6px;overflow:hidden;" title="Bredd">
+        <button class="icon-btn" style="font-size:10px;padding:3px 6px;" onclick="setPreviewWidth(375)" title="Mobil">📱</button>
+        <button class="icon-btn" style="font-size:10px;padding:3px 6px;" onclick="setPreviewWidth(768)" title="Tablet">💻</button>
+        <button class="icon-btn" style="font-size:10px;padding:3px 6px;" onclick="setPreviewWidth('100%')" title="Desktop">🖥</button>
+      </div>
+      <button id="devServerBtn" class="btn" style="font-size:11px;padding:3px 10px;display:none;" onclick="toggleDevServer()">▶ Starta</button>
+      <button class="icon-btn" onclick="refreshPreview()" title="Ladda om">↺</button>
+      <button class="icon-btn" onclick="openInNewTab()" title="Öppna i ny flik">↗</button>
+      <button class="icon-btn" onclick="closePreview()">✕</button>
+    </div>
+  </div>
+  <iframe class="preview-frame" id="previewFrame" src="about:blank" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"></iframe>
+  <div class="preview-empty" id="previewEmpty" style="display:none;">
+    <div style="font-size:40px;">🖥️</div>
+    <h2 id="previewEmptyTitle">Ingen preview ännu</h2>
+    <p id="previewEmptyMsg">Lägg till din Vercel-token och projektnamn i <strong>⚙️ Inställningar → Projekt</strong> för att se en live-preview av din app här.</p>
+    <button id="previewEmptyBtn" class="btn btn-primary" style="margin-top:4px;" onclick="closePreview();openSettings();setStab('project',document.querySelectorAll('.stab')[2])">Konfigurera Vercel</button>
+  </div>
+</div>
+
+<!-- ═══ FELKLISTRAREN ═══ -->
+<div class="preview-overlay" id="errorModal" style="align-items:center;justify-content:center;">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px;width:580px;max-width:95vw;display:flex;flex-direction:column;gap:12px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;">
+      <h2 style="font-size:14px;font-weight:700;">🐛 Klistra in fel</h2>
+      <button class="icon-btn" onclick="closeErrorModal()">✕</button>
+    </div>
+    <p style="font-size:12px;color:var(--muted);">Kopiera felmeddelandet från konsolen, terminalen eller Vercel-loggen och klistra in det här.</p>
+    <textarea id="errorInput" placeholder="TypeError: Cannot read properties of undefined...&#10;&#10;  at Component (src/components/...)&#10;  at ..." style="background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:monospace;font-size:11px;height:160px;padding:10px;resize:vertical;width:100%;"></textarea>
+    <div style="display:flex;gap:8px;justify-content:flex-end;">
+      <button class="btn-cancel" onclick="closeErrorModal()">Avbryt</button>
+      <button class="btn btn-primary" onclick="submitError()">🔨 Fixa felet</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ VERSIONSHISTORIK ═══ -->
+<div class="preview-overlay" id="historyModal" style="align-items:center;justify-content:center;">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px;width:600px;max-width:95vw;display:flex;flex-direction:column;gap:12px;max-height:80vh;">
+    <div style="display:flex;align-items:center;justify-content:space-between;">
+      <h2 style="font-size:14px;font-weight:700;">🕐 Versionshistorik</h2>
+      <button class="icon-btn" onclick="closeHistory()">✕</button>
+    </div>
+    <p style="font-size:12px;color:var(--muted);">Klicka på en version för att återgå till den. Det skapar en force-push till dev-branch — var säker.</p>
+    <div id="historyList" style="overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:6px;"></div>
+  </div>
+</div>
+
+<!-- ═══ NYTT PROJEKT ═══ -->
+<div class="np-overlay" id="npModal">
+  <div class="np-modal">
+    <h2>Nytt projekt</h2>
+    <div class="form-group"><label>Projektnamn *</label><input id="pName" placeholder="t.ex. Bokningssystem"></div>
+    <div class="form-group"><label>Beskrivning</label><input id="pDesc" placeholder="Vad ska systemet göra?"></div>
+    <div class="form-group">
+      <label>GitHub-repo</label>
+      <input id="pGithub" placeholder="t.ex. Stuwish1/mitt-projekt">
+      <small>Snickaren klonar och pushar härifrån</small>
+    </div>
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="closeNewProject()">Avbryt</button>
+      <button class="btn btn-primary" onclick="createProject()">Skapa</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const API='http://localhost:8000';
+let ws=null,chatHistory=[],currentFeature=null,currentSpecObj=null;
+let currentDiffs=[],agentsDone=0,phaseFilter='all',currentEnv='dev',appState='idle';
+let onboardingProjectId=null,onboardingHistory=[];
+let pendingSysConfig=null,currentAgents=[];
+
+// ─── INIT ─────────────────────────────────────────────────────────────────────
+function init(){
+  renderAgents([]); loadAll(); connectWS(); loadArch();
+  const inp=document.getElementById('chatInput');
+  inp.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage();}});
+  inp.addEventListener('input',()=>{inp.style.height='auto';inp.style.height=Math.min(inp.scrollHeight,110)+'px';});
+}
+
+// ─── ENV ──────────────────────────────────────────────────────────────────────
+function setEnv(env){
+  currentEnv=env;
+  document.getElementById('btnDev').className='env-btn'+(env==='dev'?' active-dev':'');
+  document.getElementById('btnProd').className='env-btn'+(env==='prod'?' active-prod':'');
+  const lbl=env==='dev'?'dev-branch':'main (produktion)';
+  const cls=env==='dev'?'dev':'prod';
+  document.getElementById('envBadge').textContent=lbl;
+  document.getElementById('envBadge').className='hdr-badge '+cls;
+  document.getElementById('diffEnvBadge').textContent=lbl;
+  document.getElementById('diffEnvBadge').className='hdr-badge '+cls;
+  document.getElementById('pushTarget').textContent=env==='dev'?'dev':'produktion';
+}
+
+// ─── WEBSOCKET ────────────────────────────────────────────────────────────────
+function connectWS(){
+  ws=new WebSocket('ws://localhost:8000/ws');
+  ws.onopen=()=>document.getElementById('connDot').classList.add('ok');
+  ws.onclose=()=>{document.getElementById('connDot').classList.remove('ok');setTimeout(connectWS,3000);};
+  ws.onmessage=e=>handleWS(JSON.parse(e.data));
+}
+
+function handleWS(msg){
+  if(msg.type==='pipeline_start'){
+    agentsDone=0;
+    setProgress(0,`Granskar: ${msg.feature}`);
+    // Re-render agents from current settings
+    if(msg.agents) renderAgents(msg.agents);
+  }
+  else if(msg.type==='iteration'){
+    document.getElementById('iterBadge').textContent=`Iter ${msg.iteration}/${msg.max}`;
+    currentAgents.forEach(a=>setAgent(a.id,'waiting'));
+    agentsDone=0;
+  }
+  else if(msg.type==='agent_status'){
+    setAgent(msg.id,msg.status,msg.findings||[]);
+    if(msg.status==='approved'||msg.status==='rejected'){
+      agentsDone++;
+      setProgress(Math.round(agentsDone/Math.max(currentAgents.length,1)*100),`${agentsDone}/${currentAgents.length} klara`);
+    }
+  }
+  else if(msg.type==='pipeline_done'){
+    if(msg.success){
+      setProgress(100,'✅ Godkänd — klar att bygga');
+      addMsg('assistant',`✅ Alla agenter godkände **${msg.feature}**!\n\nKlicka **Bygg kod** för att generera ändringar.`);
+      showActionBar('reviewed',msg.feature);
+    } else {
+      setProgress(0,'❌ Max iterationer nådda');
+      addMsg('assistant',`⚠️ **${msg.feature}** nådde max iterationer utan godkännande.`);
+      hideActionBar();
+    }
+    loadFeatures();
+  }
+  else if(msg.type==='build_start') setProgress(5,`Snickaren bygger...`);
+  else if(msg.type==='build_progress') setProgress(40,msg.message);
+  else if(msg.type==='build_done'){
+    setProgress(80,'Diff klar — väntar på din granskning');
+    currentDiffs=msg.diffs||[];
+    addMsg('assistant',`🔨 **${currentDiffs.length}** fil(er) påverkas. Granska diffs nedan.`);
+    showDiffModal(msg.feature,msg.diffs,msg.summary);
+    showActionBar('built',msg.feature);
+  }
+  else if(msg.type==='build_error'){setProgress(0,'❌ Byggfel');addMsg('assistant',`❌ ${msg.message}`);hideActionBar();}
+  else if(msg.type==='push_start') setProgress(90,`Pushar till ${msg.env||currentEnv}...`);
+  else if(msg.type==='push_done'){
+    const envLbl=msg.env==='prod'?'produktion':'dev-branch';
+    setProgress(100,`✅ Pushad till ${envLbl}!`);
+    addMsg('assistant',`🚀 **${msg.feature}** pushad till **${envLbl}**!${msg.env==='dev'?'\n\nTesta i dev. När nöjd — byt till Prod-läge och pusha till produktion.':''}`);
+    closeDiff();hideActionBar();loadFeatures();
+  }
+  else if(msg.type==='push_error'){setProgress(0,'❌ Push misslyckades');addMsg('assistant',`❌ ${msg.message}`);}
+  else if(msg.type==='revert_done'){addMsg('assistant',`✅ Återgick till commit \`${msg.hash.slice(0,8)}\`.`);}
+  else if(msg.type==='architecture_updated'){/* tyst — ARCHITECTURE.md uppdaterat i bakgrunden */}
+  else if(msg.type==='build_verify_start') setProgress(10,`Verifierar bygget (${msg.iteration}/${msg.max})...`);
+  else if(msg.type==='build_verify_running') setProgress(30,msg.message);
+  else if(msg.type==='build_verify_error'){
+    setProgress(20,'❌ Byggfel — Snickaren fixar...');
+    addMsg('assistant',`⚠️ **Byggfel (försök ${msg.iteration}):**\n\`\`\`\n${msg.output}\n\`\`\``);
+  }
+  else if(msg.type==='build_verify_fixing') setProgress(50,msg.message);
+  else if(msg.type==='build_verify_fixed'){
+    setProgress(70,`Fixade ${msg.files_fixed} fil(er) — bygger om...`);
+    addMsg('assistant',`🔧 **Snickaren fixade:** ${msg.summary}`);
+  }
+  else if(msg.type==='git_push_step'){
+    const log=document.getElementById('gitPushLog');
+    if(log){log.innerHTML+=`<div>⏳ ${msg.step}</div>`;log.scrollTop=log.scrollHeight;}
+  }
+  else if(msg.type==='git_push_done'){
+    const log=document.getElementById('gitPushLog');
+    if(log){log.innerHTML+=`<div style="color:#059669;">✅ Klart! <a href="${msg.url}" target="_blank" style="color:var(--accent);">${msg.url}</a></div>`;log.scrollTop=log.scrollHeight;}
+  }
+  else if(msg.type==='build_verify_done'){
+    if(msg.success){
+      setProgress(80,'✅ Bygget grönt!');
+      if(msg.diffs){currentDiffs=msg.diffs;}
+      addMsg('assistant',`✅ **Bygget är grönt!** (${msg.iterations} försök) — koden är verifierad och redo att pushas.`);
+      const vBtn=document.getElementById('verifyBuildBtn');
+      if(vBtn){vBtn.textContent='✅ Verifierat';vBtn.disabled=true;vBtn.style.background='rgba(16,185,129,.15)';vBtn.style.color='#059669';}
+      document.getElementById('confirmPushBtn').disabled=false;
+    } else {
+      setProgress(0,'❌ Verifiering misslyckades');
+      addMsg('assistant','❌ Bygget misslyckades efter max iterationer. Avvisa och specificera om featuren.');
+      const vBtn=document.getElementById('verifyBuildBtn');
+      if(vBtn){vBtn.textContent='❌ Misslyckades';vBtn.disabled=false;}
+    }
+  }
+  // Auto-refresh preview efter push
+  if(msg.type==='push_done'&&document.getElementById('previewModal').classList.contains('open')){
+    setTimeout(()=>refreshPreview(),5000);
+  }
+}
+
+// ─── SIDEBAR TABS ─────────────────────────────────────────────────────────────
+function setSbTab(tab,btn){
+  document.querySelectorAll('.sb-tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.sb-panel').forEach(p=>p.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('panel-'+tab).classList.add('active');
+  if(tab==='queue') loadQueue();
+}
+
+// ─── PANEL TABS ───────────────────────────────────────────────────────────────
+function setPanelTab(tab,btn){
+  document.querySelectorAll('.panel-tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.panel-content').forEach(p=>p.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('pc-'+tab).classList.add('active');
+  if(tab==='arch') loadArch();
+}
+
+// ─── LOAD ALL ─────────────────────────────────────────────────────────────────
+async function checkOllamaStatus(){
+  try{
+    const r=await fetch(`${API}/api/ollama/status`);
+    const d=await r.json();
+    const badge=document.getElementById('ollamaBadge');
+    if(!badge)return;
+    if(d.running&&d.models&&d.models.length){
+      badge.textContent=`⚡ Lokal AI (${d.models.length})`;
+      badge.style.background='rgba(16,185,129,.15)';
+      badge.style.color='#059669';
+      badge.title='Ollama: '+d.models.join(', ');
+    } else {
+      badge.textContent='⚪ Lokal AI av';
+      badge.title='Kor ollama-setup.bat for att aktivera lokal AI pa RTX 3080';
+    }
+  }catch{}
+}
+async function loadAll(){
+  try{const r=await fetch(`${API}/api/projects`);const d=await r.json();renderProjects(d);
+    const a=d.projects.find(p=>p.id===d.active);
+    if(a) document.getElementById('activeLabel').textContent=a.name+(a.description?` — ${a.description}`:'');
+  }catch{}
+  loadFeatures(); loadQueue(); checkOllamaStatus(); setTimeout(loadHealth,1500);
+}
+
+function renderProjects(data){
+  const el=document.getElementById('projectList');
+  if(!data.projects.length){el.innerHTML='<div style="padding:10px 12px;font-size:12px;color:var(--muted)">Klicka + för att skapa projekt.</div>';return;}
+  el.innerHTML=data.projects.map(p=>`
+    <div class="project-item ${p.id===data.active?'active':''}" onclick="switchProject('${p.id}')">
+      <div style="flex:1;min-width:0;"><div class="p-name">${p.name}</div><div class="p-sub">${p.description||p.github||''}</div></div>
+      <button class="del-btn" onclick="event.stopPropagation();deleteProject('${p.id}')">×</button>
+    </div>`).join('');
+}
+
+async function switchProject(id){
+  await fetch(`${API}/api/projects/active`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({id})});
+  chatHistory=[];document.getElementById('messages').innerHTML='';
+  renderAgents([]);setProgress(0,'Väntar...');document.getElementById('iterBadge').textContent='–';
+  hideActionBar();hideSuggestions();hideSysCfg();appState='idle';
+  addMsg('assistant','Projekt bytt! Berätta vad du vill bygga.');loadAll();loadArch();
+}
+
+async function deleteProject(id){if(!confirm('Ta bort projektet?'))return;await fetch(`${API}/api/projects/${id}`,{method:'DELETE'});loadAll();}
+
+function setPhase(ph,btn){
+  phaseFilter=ph;
+  document.querySelectorAll('.phase-tab').forEach(t=>t.classList.remove('active'));
+  btn.classList.add('active');loadFeatures();
+}
+
+async function loadFeatures(){
+  try{const r=await fetch(`${API}/api/features`);const data=await r.json();
+    const filtered=phaseFilter==='all'?data:data.filter(f=>f.phase===phaseFilter);
+    document.getElementById('featureList').innerHTML=filtered.length?filtered.map(f=>`
+      <div class="f-item">
+        <div style="flex:1;min-width:0;"><div class="f-name">${f.name}</div><span class="f-phase">${f.phase||'MVP'}</span></div>
+        <span class="f-badge fb-${(f.status||'planerad').toLowerCase().replace(' ','-')}">${f.status}</span>
+      </div>`).join(''):'<div style="padding:10px 12px;font-size:12px;color:var(--muted)">Inga features ännu.</div>';
+    renderPhaseProgress(data);
+  }catch{}
+}
+
+function renderPhaseProgress(features){
+  const phases={MVP:[],v1:[],v2:[]};
+  features.forEach(f=>{const ph=f.phase||'MVP';if(phases[ph])phases[ph].push(f);});
+  document.getElementById('phaseProgress').innerHTML=Object.entries(phases).map(([ph,items])=>{
+    const done=items.filter(f=>f.status==='Klar'||f.status==='I dev').length,total=items.length,pct=total?Math.round(done/total*100):0;
+    return `<div class="pr-row"><span class="pr-lbl">${ph}</span><div class="pr-bar"><div class="pr-fill fill-${ph.toLowerCase()}" style="width:${pct}%"></div></div><span class="pr-cnt">${done}/${total}</span></div>`;
+  }).join('');
+}
+
+// ─── QUEUE ────────────────────────────────────────────────────────────────────
+async function loadQueue(){
+  try{const r=await fetch(`${API}/api/queue`);const q=await r.json();
+    document.getElementById('queueCount').textContent=q.length?`(${q.length})`:'';
+    document.getElementById('queueList').innerHTML=q.length?q.map(item=>`
+      <div class="queue-item" onclick="startFromQueue(${item.id},'${item.name.replace(/'/g,"\\'")}')">
+        <div style="flex:1;min-width:0;">
+          <div class="qi-name">${item.name}</div>
+          ${item.description?`<div style="font-size:10px;color:var(--muted);margin-top:1px;">${item.description}</div>`:''}
+        </div>
+        <span class="qi-phase">${item.phase}</span>
+        <button class="qi-del" onclick="event.stopPropagation();removeFromQueue(${item.id})">×</button>
+      </div>`).join(''):'<div style="padding:12px;font-size:12px;color:var(--muted);">Kön är tom.<br>Föreslagna features läggs hit automatiskt.</div>';
+  }catch{}
+}
+
+async function addToQueue(name,phase,description,fromSuggestion=false){
+  await fetch(`${API}/api/queue`,{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({name,phase,description,from_suggestion:fromSuggestion})});
+  loadQueue();
+  setSbTab('queue',document.querySelectorAll('.sb-tab')[1]);
+}
+
+async function removeFromQueue(id){
+  await fetch(`${API}/api/queue/${id}`,{method:'DELETE'});loadQueue();
+}
+
+function startFromQueue(id,name){
+  addMsg('assistant',`Startar arbete med **${name}** från kön. Berätta mer om exakt vad du vill se så specificerar vi det ordentligt.`);
+  document.getElementById('chatInput').value=`Jag vill specificera "${name}"`;
+  document.getElementById('chatInput').focus();
+}
+
+// ─── SUGGESTIONS ─────────────────────────────────────────────────────────────
+async function loadSuggestions(spec){
+  hideSuggestions();
+  try{
+    const r=await fetch(`${API}/api/suggestions`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({spec})});
+    const d=await r.json();
+    if(!d.suggestions||!d.suggestions.length) return;
+    const chips=document.getElementById('sugChips');
+    chips.innerHTML=d.suggestions.map((s,i)=>`
+      <button class="sug-chip" onclick="queueSuggestion(${i})" data-name="${s.name.replace(/"/g,'&quot;')}" data-phase="${s.phase}" data-desc="${(s.description||'').replace(/"/g,'&quot;')}">
+        + ${s.name} <span class="sug-phase">${s.phase}</span>
+      </button>`).join('');
+    document.getElementById('suggestionsBar').style.display='block';
+  }catch{}
+}
+
+function queueSuggestion(i){
+  const chip=document.querySelectorAll('.sug-chip')[i];
+  if(!chip)return;
+  addToQueue(chip.dataset.name,chip.dataset.phase,chip.dataset.desc,true);
+  chip.style.opacity='.4';chip.disabled=true;chip.textContent='✓ Tillagd';
+}
+
+function hideSuggestions(){document.getElementById('suggestionsBar').style.display='none';}
+
+// ─── SYSTEM CONFIG ────────────────────────────────────────────────────────────
+function showSysCfg(config){
+  pendingSysConfig=config;
+  const bar=document.getElementById('syscfgBar');
+  document.getElementById('syscfgDesc').textContent=config.description||'Systemändring identifierad';
+  bar.classList.add('show');
+}
+function hideSysCfg(){document.getElementById('syscfgBar').classList.remove('show');pendingSysConfig=null;}
+function dismissSysCfg(){hideSysCfg();}
+
+async function applySystemConfig(){
+  if(!pendingSysConfig)return;
+  document.getElementById('syscfgApplyBtn').disabled=true;
+  try{
+    const r=await fetch(`${API}/api/apply-system-config`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({config:pendingSysConfig})});
+    const d=await r.json();
+    hideSysCfg();
+    addMsg('assistant',`✅ Systemändring applicerad: ${d.message||'Klar!'}\n\nDu kan se och justera allt i ⚙️ Inställningar → Agenter.`);
+    loadSettingsData(); // reload settings
+  }catch(e){
+    addMsg('assistant',`❌ Kunde inte applicera systemändring: ${e}`);
+    document.getElementById('syscfgApplyBtn').disabled=false;
+  }
+}
+
+// ─── CHAT ─────────────────────────────────────────────────────────────────────
+async function sendMessage(){
+  const inp=document.getElementById('chatInput');const text=inp.value.trim();if(!text)return;
+  inp.value='';inp.style.height='40px';document.getElementById('sendBtn').disabled=true;
+  addMsg('user',text);
+  const tid=showTyping();
+  try{
+    // Onboarding-läge: skicka till onboarding-endpoint
+    if(onboardingProjectId){
+      onboardingHistory.push({role:'user',content:text});
+      const r=await fetch(`${API}/api/projects/${onboardingProjectId}/onboard`,{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({message:text,history:onboardingHistory.slice(-10)})});
+      const d=await r.json(); removeTyping(tid);
+      let display=d.reply.replace(/\[ONBOARDING_KLAR\][\s\S]*?\[\/ONBOARDING_KLAR\]/g,'').trim();
+      addMsg('assistant',display);onboardingHistory.push({role:'assistant',content:d.reply});
+      if(d.onboarding_complete){
+        onboardingProjectId=null;onboardingHistory=[];
+        hideOnboardingBanner();
+        const od=d.onboarding_data||{};
+        let summary='✅ **Projektet är konfigurerat!**\n\n';
+        if(od.mvp_features&&od.mvp_features.length){
+          summary+=`📋 **${od.mvp_features.length} MVP-features** lagda i kön:\n`;
+          od.mvp_features.forEach(f=>{ summary+=`- ${f.name}\n`; });
+          summary+='\n';
+        }
+        summary+='📁 **Minnesfiler uppdaterade:** CLAUDE.md, SCHEMA.md, PATTERNS.md, DECISIONS.md\n\nDu kan nu börja specfa features!';
+        addMsg('assistant',summary);
+        loadAll();
+      }
+    } else {
+      // Normalt läge
+      chatHistory.push({role:'user',content:text});
+      const r=await fetch(`${API}/api/chat`,{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({message:text,history:chatHistory.slice(-12)})});
+      const d=await r.json(); removeTyping(tid);
+      let display=d.reply.replace(/\[FEATURE_KLAR\][\s\S]*?\[\/FEATURE_KLAR\]/g,'').replace(/\[SYSTEM_KLAR\][\s\S]*?\[\/SYSTEM_KLAR\]/g,'').trim();
+      addMsg('assistant',display);chatHistory.push({role:'assistant',content:d.reply});
+      if(d.feature_detected&&d.feature_spec){
+        currentFeature=d.feature_detected;currentSpecObj=d.feature_spec;
+        const ac=d.feature_spec.acceptance_criteria;
+        let acText='';
+        if(ac&&ac.length) acText='\n\n**Klart när:**\n'+ac.map(c=>`- ${c}`).join('\n');
+        addMsg('assistant',`📋 **Feature klar:** ${d.feature_detected} [${d.feature_spec.phase||'MVP'}]${acText}\n\nStarta granskning när du är klar.`);
+        showActionBar('pending_review',d.feature_detected);
+        loadSuggestions(d.feature_spec);
+        loadFeatures();
+      }
+      if(d.system_config){ showSysCfg(d.system_config); }
+    }
+  }catch(e){removeTyping(tid);addMsg('assistant','⚠️ Kunde inte nå servern. Kör app.py?');}
+  document.getElementById('sendBtn').disabled=false;
+}
+
+// ─── ACTION BAR ───────────────────────────────────────────────────────────────
+function showActionBar(state,featureName){
+  appState=state;currentFeature=featureName;
+  const bar=document.getElementById('actionBar');
+  const lbl=document.getElementById('actionLabel');
+  const b1=document.getElementById('actionBtn1');
+  const b2=document.getElementById('actionBtn2');
+  bar.classList.remove('hidden');
+  if(state==='pending_review'){
+    lbl.textContent=`"${featureName}" — klar för granskning`;
+    b1.textContent='▶ Starta granskning';b1.className='btn btn-primary';b1.disabled=false;b1.onclick=startReview;
+    b2.textContent='Ändra spec';b2.style.display='inline-block';b2.onclick=()=>hideActionBar();
+  } else if(state==='reviewed'){
+    lbl.textContent=`Agenter godkände "${featureName}"`;
+    b1.textContent='🔨 Bygg kod';b1.className='btn btn-primary';b1.disabled=false;b1.onclick=startBuild;
+    b2.textContent='Avvisa';b2.style.display='inline-block';b2.onclick=handleAction2;
+  } else if(state==='built'){
+    lbl.textContent='Granska diff';
+    b1.textContent='📋 Visa diff igen';b1.className='btn btn-outline';b1.disabled=false;b1.onclick=()=>showDiffModal(currentFeature,currentDiffs,'');
+    b2.textContent='Avvisa — bygg om';b2.style.display='inline-block';b2.onclick=rejectBuild;
+  }
+}
+
+function hideActionBar(){document.getElementById('actionBar').classList.add('hidden');}
+function handleAction1(){if(appState==='reviewed')startBuild();else if(appState==='built')showDiffModal(currentFeature,currentDiffs,'');}
+function handleAction2(){if(confirm('Avvisa?')){hideActionBar();addMsg('assistant','Avvisad. Berätta vad vi ska ändra.');appState='idle';}}
+
+async function startReview(){
+  if(!currentFeature)return;
+  document.getElementById('actionBtn1').disabled=true;
+  addMsg('assistant',`📋 **Spec-granskaren** kontrollerar att "${currentFeature}" är tillräckligt tydlig...`);
+  try{
+    const sr=await fetch(`${API}/api/spec-review`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({spec:currentSpecObj})});
+    const specRes=await sr.json();
+    if(!specRes.redo_att_bygga||specRes.status==='OTYDLIG'){
+      const fq=(specRes.fragor||[]).map(q=>`- ${q}`).join('\n');
+      const fs=specRes.forslag?`\n\n💡 **Förslag:** ${specRes.forslag}`:'';
+      addMsg('assistant',`⚠️ **Spec-granskaren: OTYDLIG**\n\nFör att undvika att Snickaren bygger fel sak, svara på:\n${fq}${fs}`);
+      document.getElementById('actionBtn1').disabled=false;
+      showActionBar('pending_review',currentFeature);
+      return;
+    }
+    addMsg('assistant',`✅ Spec-granskaren: specen är tydlig — startar agenterna...`);
+  }catch(e){/* om spec-review misslyckas, kör ändå */}
+  hideActionBar();
+  await fetch(`${API}/api/review`,{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({feature_name:currentFeature,spec_obj:currentSpecObj})});
+}
+
+async function startBuild(){
+  if(!currentFeature)return;
+  document.getElementById('actionBtn1').disabled=true;
+  addMsg('assistant',`🔨 Snickaren bygger **${currentFeature}**...\n\nKlonar repo, läser koden. ~30 sek.`);
+  await fetch(`${API}/api/build`,{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({feature_name:currentFeature,spec_obj:currentSpecObj,env:currentEnv})});
+}
+
+async function confirmPush(){
+  if(!currentFeature)return;
+  document.getElementById('confirmPushBtn').disabled=true;
+  closeDiff();
+  await fetch(`${API}/api/push`,{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({feature_name:currentFeature,env:currentEnv})});
+}
+
+// ─── HEALTH / SYSTEMSTATUS ────────────────────────────────────────────────────
+const SETUP_STEPS = [
+  {key:'claude',  icon:'🤖', label:'Claude API',        inline:'claude'},
+  {key:'github',  icon:'🐙', label:'GitHub Token',      inline:'github'},
+  {key:'git',     icon:'📦', label:'Git',               fix:'Ladda ner från git-scm.com och installera'},
+  {key:'npm',     icon:'⚙️', label:'Node.js / npm',     fix:'Ladda ner från nodejs.org och installera'},
+  {key:'ollama',  icon:'⚡', label:'Lokal AI (Ollama)', fix:'Kör ollama-setup.bat i C:\\innob-agent\\'},
+  {key:'project', icon:'📁', label:'Aktivt projekt',    fix:'Skapa ett nytt projekt i sidopanelen'},
+];
+
+async function saveInlineKey(type){
+  const val=document.getElementById('inline-'+type).value.trim();
+  if(!val)return;
+  const payload=type==='claude'?{api_key:val}:{github_token:val};
+  const r=await fetch(`${API}/api/settings`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+  if(r.ok){loadHealth();}else{alert('Kunde inte spara.');}
+}
+
+async function gitPushUI(){
+  const btn=document.getElementById('gitPushBtn');
+  const log=document.getElementById('gitPushLog');
+  btn.disabled=true; btn.textContent='⏳ Pushar...';
+  log.style.display='block'; log.innerHTML='';
+  try{
+    const r=await fetch(`${API}/api/git-push`,{method:'POST'});
+    const d=await r.json();
+    if(d.ok){
+      log.innerHTML+=`<div style="color:#059669;margin-top:6px;">✅ Klart! <a href="${d.url}" target="_blank" style="color:var(--accent);">${d.url}</a></div>`;
+      btn.textContent='✅ Pushad!';
+    }else{
+      log.innerHTML+=`<div style="color:#dc2626;">❌ ${d.error}</div>`;
+      btn.disabled=false; btn.textContent='🚀 Pusha till GitHub';
+    }
+  }catch(e){
+    log.innerHTML+=`<div style="color:#dc2626;">❌ Serverfel: ${e}</div>`;
+    btn.disabled=false; btn.textContent='🚀 Pusha till GitHub';
+  }
+}
+
+async function loadHealth(){
+  document.getElementById('healthBody').innerHTML='<div style="text-align:center;color:var(--muted);padding:20px;">Kontrollerar systemet...</div>';
+  document.getElementById('healthBtn').textContent='⏳';
+  try{
+    const r=await fetch(`${API}/api/health`);
+    const d=await r.json();
+    const checks=d.checks||{};
+    let allOk=d.ok;
+    document.getElementById('healthBtn').textContent=allOk?'🟢':'🔴';
+
+    let html='';
+    const nOk=Object.values(checks).filter(c=>c.ok).length;
+    const nTotal=Object.keys(checks).length;
+    const summaryColor=allOk?'rgba(16,185,129,.12)':'rgba(239,68,68,.08)';
+    const summaryIcon=allOk?'✅':'⚠️';
+    html+=`<div style="padding:10px 14px;border-radius:8px;background:${summaryColor};margin-bottom:14px;font-size:13px;">
+      ${summaryIcon} <strong>${allOk?'Allt fungerar':'Åtgärder krävs'}</strong> — ${nOk} av ${nTotal} komponenter OK
+    </div>`;
+
+    SETUP_STEPS.forEach(step=>{
+      const c=checks[step.key];
+      if(!c)return;
+      const ok=c.ok;
+      const bg=ok?'rgba(16,185,129,.07)':'rgba(239,68,68,.07)';
+      const border=ok?'rgba(16,185,129,.25)':'rgba(239,68,68,.25)';
+      const dot=ok?'🟢':'🔴';
+      let fixHtml='';
+      if(!ok){
+        if(step.inline==='claude'){
+          fixHtml=`<div style="margin-top:8px;padding-left:22px;display:flex;gap:6px;align-items:center;">
+            <input id="inline-claude" type="password" placeholder="sk-ant-..." autocomplete="off"
+              style="flex:1;padding:5px 8px;border-radius:5px;border:1px solid var(--border);background:var(--bg-2);color:var(--text);font-size:12px;">
+            <button onclick="saveInlineKey('claude')" style="padding:5px 10px;border-radius:5px;background:var(--accent);color:#fff;border:none;cursor:pointer;font-size:12px;">Spara</button>
+            <a href="https://console.anthropic.com" target="_blank" style="font-size:11px;color:var(--accent);">Skaffa nyckel →</a>
+          </div>`;
+        }else if(step.inline==='github'){
+          fixHtml=`<div style="margin-top:8px;padding-left:22px;display:flex;gap:6px;align-items:center;">
+            <input id="inline-github" type="password" placeholder="ghp_..." autocomplete="off"
+              style="flex:1;padding:5px 8px;border-radius:5px;border:1px solid var(--border);background:var(--bg-2);color:var(--text);font-size:12px;">
+            <button onclick="saveInlineKey('github')" style="padding:5px 10px;border-radius:5px;background:var(--accent);color:#fff;border:none;cursor:pointer;font-size:12px;">Spara</button>
+            <a href="https://github.com/settings/tokens/new?scopes=repo&description=IshooCreator" target="_blank" style="font-size:11px;color:var(--accent);">Skaffa token →</a>
+          </div>`;
+        }else{
+          fixHtml=`<div style="font-size:11px;color:#b45309;padding-left:22px;margin-top:4px;">👉 ${step.fix}</div>`;
+        }
+      }
+      html+=`<div style="border:1px solid ${border};background:${bg};border-radius:8px;padding:10px 14px;margin-bottom:8px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:${ok?0:2}px;">
+          <span>${dot}</span>
+          <span style="font-size:13px;font-weight:500;">${step.icon} ${step.label}</span>
+          <span style="margin-left:auto;font-size:11px;color:${ok?'#059669':'#dc2626'};font-weight:500;">${c.status}</span>
+        </div>
+        <div style="font-size:11px;color:var(--muted);padding-left:22px;">${c.detail||''}</div>
+        ${fixHtml}
+      </div>`;
+    });
+
+    // GitHub push-sektion
+    const githubOk=checks.github&&checks.github.ok;
+    const gitOk=checks.git&&checks.git.ok;
+    if(githubOk&&gitOk){
+      html+=`<div style="margin-top:14px;padding:12px 14px;border:1px solid rgba(139,92,246,.3);border-radius:8px;background:rgba(139,92,246,.06);">
+        <div style="font-size:13px;font-weight:500;margin-bottom:8px;">🚀 Pusha Ishoo Creator till GitHub</div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:8px;">Skapar/uppdaterar Stuwish1/ishoo-creator och pushar all kod.</div>
+        <button id="gitPushBtn" onclick="gitPushUI()" style="padding:7px 16px;border-radius:6px;background:#7c3aed;color:#fff;border:none;cursor:pointer;font-size:13px;font-weight:500;">🚀 Pusha till GitHub</button>
+        <div id="gitPushLog" style="display:none;margin-top:8px;font-size:11px;color:var(--muted);font-family:monospace;background:var(--bg-2);border-radius:5px;padding:6px 8px;max-height:120px;overflow:auto;"></div>
+      </div>`;
+    }
+
+    if(!allOk){
+      html+=`<details style="margin-top:12px;">
+        <summary style="font-size:12px;color:var(--muted);cursor:pointer;padding:6px 0;">📋 Ny dator? Fullständig setup-guide</summary>
+        <div style="font-size:12px;color:var(--muted);margin-top:8px;line-height:1.8;padding:10px;background:var(--bg-2);border-radius:6px;">
+          <strong>1.</strong> Installera <a href="https://python.org/downloads" target="_blank" style="color:var(--accent);">Python 3.11+</a> (kryssa "Add to PATH")<br>
+          <strong>2.</strong> Installera <a href="https://git-scm.com" target="_blank" style="color:var(--accent);">Git</a><br>
+          <strong>3.</strong> Installera <a href="https://nodejs.org" target="_blank" style="color:var(--accent);">Node.js LTS</a><br>
+          <strong>4.</strong> Dubbelklicka <code>setup.bat</code> — installerar Python-paket<br>
+          <strong>5.</strong> Skaffa <a href="https://console.anthropic.com" target="_blank" style="color:var(--accent);">Anthropic API-nyckel</a> — klistra in ovan<br>
+          <strong>6.</strong> Skaffa <a href="https://github.com/settings/tokens/new?scopes=repo&description=IshooCreator" target="_blank" style="color:var(--accent);">GitHub Personal Access Token</a> (välj: repo) — klistra in ovan<br>
+          <strong>7.</strong> (Valfritt) Kör <code>ollama-setup.bat</code> för lokal AI på GPU
+        </div>
+      </details>`;
+    }
+
+    document.getElementById('healthBody').innerHTML=html;
+  }catch(e){
+    document.getElementById('healthBtn').textContent='🔴';
+    document.getElementById('healthBody').innerHTML=`<div style="color:var(--red);padding:16px;">Kunde inte nå servern: ${e}</div>`;
+  }
+}
+
+function openHealth(){
+  document.getElementById('healthModal').classList.add('open');
+  loadHealth();
+}
+function closeHealth(){document.getElementById('healthModal').classList.remove('open');}
+document.getElementById('healthModal').addEventListener('click',e=>{if(e.target===document.getElementById('healthModal'))closeHealth();});
+
+function rejectBuild(){closeDiff();addMsg('assistant','Koden avvisad. Berätta vad som ska ändras.');hideActionBar();appState='idle';}
+
+async function startBuildVerify(){
+  if(!currentFeature)return;
+  const btn=document.getElementById('verifyBuildBtn');
+  if(btn){btn.disabled=true;btn.textContent='⏳ Verifierar...';}
+  document.getElementById('confirmPushBtn').disabled=true;
+  addMsg('assistant',`🔍 Verifierar bygget för **${currentFeature}**...\n\nKör npm build och fixar fel automatiskt om de uppstår.`);
+  try{
+    await fetch(`${API}/api/build-verify`,{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({feature_name:currentFeature})});
+  }catch(e){
+    addMsg('assistant','❌ Verifieringsfel: '+e);
+    if(btn){btn.disabled=false;btn.textContent='🔍 Verifiera bygget';}
+  }
+}
+
+// ─── DIFF MODAL ───────────────────────────────────────────────────────────────
+function showDiffModal(feature,diffs,summary){
+  document.getElementById('diffTitle').textContent=`${feature} — Kodgranskning`;
+  setEnv(currentEnv);
+  const body=document.getElementById('diffBody');
+  if(!diffs||!diffs.length){body.innerHTML='<div style="padding:18px;color:var(--muted);font-size:13px;">Inga filändringar.</div>';document.getElementById('diffModal').classList.add('open');return;}
+  let html='';
+  if(summary)html+=`<div style="padding:10px 14px;background:rgba(99,102,241,.05);border-bottom:1px solid var(--border);font-size:12px;color:var(--muted);">${summary}</div>`;
+  diffs.forEach((d,i)=>{
+    const ac=d.action==='create'?'da-create':d.action==='delete'?'da-delete':'da-modify';
+    const al=d.action==='create'?'Ny fil':d.action==='delete'?'Tas bort':'Ändrad';
+    html+=`<div class="diff-file"><div class="diff-file-hdr" onclick="toggleDiff(${i})">
+      <span class="diff-file-path">${d.path}</span>
+      <span class="diff-action ${ac}">${al}</span>
+      <span class="diff-stats"><span style="color:var(--green)">+${d.added}</span> <span style="color:var(--red)">-${d.removed}</span></span>
+    </div><div class="diff-content" id="diff-${i}">`;
+    if(d.lines&&d.lines.length){
+      let n=1;
+      d.lines.forEach(l=>{
+        const cls=l.type==='add'?'dl-add':l.type==='del'?'dl-del':l.type==='hunk'?'dl-hunk':'dl-ctx';
+        const pre=l.type==='add'?'+':l.type==='del'?'-':l.type==='hunk'?'@':' ';
+        const num=l.type==='hunk'?'':n++;
+        const esc=l.content.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        html+=`<div class="diff-line ${cls}"><span class="diff-line-num">${num}</span><span class="diff-line-content">${pre} ${esc}</span></div>`;
+      });
+    }
+    html+='</div></div>';
+  });
+  document.getElementById('diffBody').innerHTML=html;
+  document.getElementById('diff-0')?.classList.add('open');
+  document.getElementById('diffModal').classList.add('open');
+  document.getElementById('confirmPushBtn').disabled=false;
+}
+
+function toggleDiff(i){document.getElementById(`diff-${i}`)?.classList.toggle('open');}
+function closeDiff(){document.getElementById('diffModal').classList.remove('open');}
+document.getElementById('diffModal').addEventListener('click',e=>{if(e.target===document.getElementById('diffModal'))closeDiff();});
+
+// ─── SETTINGS ─────────────────────────────────────────────────────────────────
+let settingsData={};
+
+async function loadSettingsData(){
+  try{const r=await fetch(`${API}/api/settings`);settingsData=await r.json();
+    document.getElementById('s-api-key').placeholder=settingsData.api_key_set?'••••••••••••(satt)':'sk-ant-...';
+    document.getElementById('s-github-token').placeholder=settingsData.github_token_set?'••••••••••••(satt)':'ghp_...';
+    document.getElementById('s-git-name').value=settingsData.git_name||'';
+    document.getElementById('s-git-email').value=settingsData.git_email||'';
+    document.getElementById('s-dev-branch').value=settingsData.dev_branch||'dev';
+    document.getElementById('s-prod-branch').value=settingsData.prod_branch||'main';
+    document.getElementById('s-max-iter').value=settingsData.max_iterations||3;
+    document.getElementById('s-model-pl').value=settingsData.model_projektledare||'claude-sonnet-4-6';
+    document.getElementById('s-model-snickare').value=settingsData.model_snickare||'claude-sonnet-4-6';
+    document.getElementById('s-model-haiku').value=settingsData.model_haiku||'claude-haiku-4-5-20251001';
+    renderAgentCards(settingsData.agents||[]);
+  }catch{}
+  // Load project settings
+  try{
+    const pr=await fetch(`${API}/api/projects`);const pd=await pr.json();
+    const active=pd.projects.find(p=>p.id===pd.active);
+    if(active&&active.id){
+      const psr=await fetch(`${API}/api/projects/${active.id}/settings`);const ps=await psr.json();
+      document.getElementById('ps-github').value=active.github||'';
+      document.getElementById('ps-supa-dev-url').value=ps.supabase_dev_url||'';
+      document.getElementById('ps-supa-prod-url').value=ps.supabase_prod_url||'';
+      document.getElementById('ps-vercel-project').value=ps.vercel_project_name||ps.vercel_project_id||'';
+    }
+    // Vercel token (global setting)
+    const sv=await fetch(`${API}/api/settings`);const sd=await sv.json();
+    if(sd.vercel_token) document.getElementById('ps-vercel-token').placeholder='••••••(satt)';
+    if(sd.vercel_team_id) document.getElementById('ps-vercel-team').value=sd.vercel_team_id||'';
+  }catch{}
+}
+
+function renderAgentCards(agents){
+  document.getElementById('agentCards').innerHTML=agents.map(a=>`
+    <div class="agent-card" id="ac-${a.id}">
+      <div class="agent-card-top">
+        <span style="font-size:14px;">${a.emoji||'🤖'}</span>
+        <span class="agent-card-name">${a.name}</span>
+        <span class="agent-model-badge">${a.model||'haiku'}</span>
+        ${a.is_inspector?'<span style="font-size:10px;color:var(--yellow);padding:1px 6px;border:1px solid rgba(234,179,8,.3);border-radius:4px;">Inspector</span>':''}
+        <label class="agent-toggle"><input type="checkbox" ${a.enabled!==false?'checked':''} onchange="toggleAgent('${a.id}',this.checked)"><span class="agent-toggle-slider"></span></label>
+        <button class="agent-card-edit" onclick="toggleAgentEdit('${a.id}')">Redigera</button>
+        ${!a.is_inspector?`<button class="agent-card-del" onclick="deleteAgent('${a.id}')">Ta bort</button>`:''}
+      </div>
+      <div class="agent-card-body" id="acb-${a.id}">
+        <div class="form-group" style="margin-top:8px;">
+          <label>Namn</label><input type="text" id="an-${a.id}" value="${a.name}">
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>Emoji</label><input type="text" id="ae-${a.id}" value="${a.emoji||'🤖'}" style="width:60px;"></div>
+          <div class="form-group"><label>Modell</label>
+            <select id="am-${a.id}">
+              <option value="haiku" ${a.model==='haiku'?'selected':''}>Haiku (Claude)</option>
+              <option value="sonnet" ${a.model==='sonnet'?'selected':''}>Sonnet (Claude)</option>
+              <option value="ollama:qwen2.5-coder:7b" ${a.model==='ollama:qwen2.5-coder:7b'?'selected':''}>⚡ Lokal: qwen2.5-coder:7b</option>
+              <option value="ollama:llama3.2:3b" ${a.model==='ollama:llama3.2:3b'?'selected':''}>⚡ Lokal: llama3.2:3b</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>System-prompt</label>
+          <textarea id="ap-${a.id}" style="min-height:100px;">${a.prompt||''}</textarea>
+        </div>
+        <div style="display:flex;gap:6px;justify-content:flex-end;margin-top:4px;">
+          <button class="btn btn-primary" style="font-size:11px;padding:5px 12px;" onclick="saveAgent('${a.id}')">Spara</button>
+        </div>
+      </div>
+    </div>`).join('');
+}
+
+function toggleAgentEdit(id){document.getElementById(`acb-${id}`)?.classList.toggle('open');}
+
+async function toggleAgent(id,enabled){
+  await fetch(`${API}/api/agents/${id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled})});
+}
+
+async function saveAgent(id){
+  const payload={name:document.getElementById(`an-${id}`).value,emoji:document.getElementById(`ae-${id}`).value,
+    model:document.getElementById(`am-${id}`).value,prompt:document.getElementById(`ap-${id}`).value};
+  await fetch(`${API}/api/agents/${id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+  loadSettingsData();
+}
+
+
+async function saveNewAgent(){
+  const name=document.getElementById('na-name').value.trim();if(!name)return;
+  const isInsp=document.getElementById('na-type').value==='inspector';
+  const payload={name,emoji:document.getElementById('na-emoji').value,
+    model:document.getElementById('na-model').value,
+    is_inspector:isInsp,prompt:document.getElementById('na-prompt').value};
+  await fetch(`${API}/api/agents`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+  document.getElementById('newAgentForm').style.display='none';
+  ['na-name','na-prompt'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('na-emoji').value='🤖';
+  loadSettingsData();
+}
+
+function setStab(tab,btn){
+  document.querySelectorAll('.stab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.settings-section').forEach(s=>s.classList.remove('active'));
+  btn.classList.add('active');document.getElementById('ss-'+tab).classList.add('active');
+}
+
+function openSettings(){loadSettingsData();document.getElementById('settingsModal').classList.add('open');}
+function closeSettings(){document.getElementById('settingsModal').classList.remove('open');}
+
+async function saveSettings(){
+  const payload={};
+  try{
+  const apiKey=document.getElementById('s-api-key').value;if(apiKey&&apiKey!=='')payload.api_key=apiKey;
+  const ghToken=document.getElementById('s-github-token').value;if(ghToken&&ghToken!=='')payload.github_token=ghToken;
+  payload.git_name=document.getElementById('s-git-name').value;
+  payload.git_email=document.getElementById('s-git-email').value;
+  payload.dev_branch=document.getElementById('s-dev-branch').value||'dev';
+  payload.prod_branch=document.getElementById('s-prod-branch').value||'main';
+  payload.max_iterations=parseInt(document.getElementById('s-max-iter').value)||3;
+  payload.model_projektledare=document.getElementById('s-model-pl').value;
+  payload.model_snickare=document.getElementById('s-model-snickare').value;
+  payload.model_haiku=document.getElementById('s-model-haiku').value;
+  await fetch(`${API}/api/settings`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+  try{
+    const pr=await fetch(`${API}/api/projects`);const pd=await pr.json();
+    const active=pd.projects.find(p=>p.id===pd.active);
+    if(active){
+      const vercelToken=document.getElementById('ps-vercel-token').value;
+      if(vercelToken) await fetch(`${API}/api/settings`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({vercel_token:vercelToken,vercel_team_id:document.getElementById('ps-vercel-team').value||''})});
+      const psp={github:document.getElementById('ps-github').value,
+        supabase_dev_url:document.getElementById('ps-supa-dev-url').value,
+        supabase_dev_key:document.getElementById('ps-supa-dev-key').value,
+        supabase_prod_url:document.getElementById('ps-supa-prod-url').value,
+        supabase_prod_key:document.getElementById('ps-supa-prod-key').value,
+        vercel_project_name:document.getElementById('ps-vercel-project').value};
+      await fetch(`${API}/api/projects/${active.id}/settings`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(psp)});
+    }
+  }catch{}
+  closeSettings();addMsg('assistant','✅ Inställningar sparade!');
+  }catch(e){alert('Fel vid sparning: '+e);}
+}
+
+async function loadArch(){
+  try{const r=await fetch(`${API}/api/architecture`);const d=await r.json();
+    document.getElementById('archText').textContent=d.content||'Ingen arkitekturkarta ännu.\nKlona repot och klicka "Generera".';}
+  catch{}
+}
+
+async function generateArch(){
+  document.getElementById('archText').textContent='Genererar arkitekturkarta...';
+  try{const r=await fetch(`${API}/api/architecture/generate`,{method:'POST'});const d=await r.json();
+    document.getElementById('archText').textContent=d.content||d.error||'Fel';
+  }catch{document.getElementById('archText').textContent='Kunde inte generera. Är repot klonat?';}
+}
+
+function editArch(){
+  const pre=document.getElementById('archText');
+  const current=pre.textContent;
+  const ta=document.createElement('textarea');
+  ta.style.cssText='width:100%;height:300px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:8px;font-size:11px;font-family:monospace;outline:none;resize:vertical;';
+  ta.value=current;pre.replaceWith(ta);
+  const saveBtn=document.createElement('button');
+  saveBtn.textContent='Spara';saveBtn.className='btn btn-green';saveBtn.style.cssText='font-size:11px;padding:5px 12px;margin-top:6px;';
+  saveBtn.onclick=async()=>{
+    await fetch(`${API}/api/architecture`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({content:ta.value})});
+    const newPre=document.createElement('pre');newPre.id='archText';newPre.style.cssText='font-size:11px;font-family:monospace;line-height:1.6;color:var(--muted);white-space:pre-wrap;word-break:break-word;';
+    newPre.textContent=ta.value;ta.replaceWith(newPre);saveBtn.remove();
+  };
+  ta.parentNode.insertBefore(saveBtn,ta.nextSibling);ta.focus();
+}
+
+function renderAgents(agents){
+  currentAgents=agents.length?agents:[
+    {id:'security',name:'🔒 Säkerhetsansvarig'},{id:'dba',name:'🗄️ DBA'},
+    {id:'conflict',name:'🔍 Konfliktgranskare'},{id:'ux',name:'🎨 UX + Buggletare'},
+    {id:'architect',name:'🏗️ Arkitektur'},{id:'inspector',name:'✅ Besiktningsman'},
+    {id:'business-logic',name:'🧠 Affärslogik'},{id:'test-generator',name:'🧪 Testgranskare'},
+    {id:'performance',name:'⚡ Prestandagranskare'},{id:'mobile-ux',name:'📱 Mobil/Fält'},
+  ];
+  document.getElementById('agentList').innerHTML=currentAgents.map(a=>`
+    <div class="agent-row" id="row-${a.id}">
+      <div class="agent-row-top">
+        <div class="agent-name">${a.name}</div>
+        <span class="s-pill s-waiting" id="pill-${a.id}">Väntar</span>
+      </div>
+      <div class="agent-findings" id="findings-${a.id}"></div>
+    </div>`).join('');
+}
+
+function setAgent(id,status,findings=[]){
+  const pill=document.getElementById(`pill-${id}`);if(!pill)return;
+  const m={waiting:['s-waiting','Väntar'],running:['s-running','Kör...'],approved:['s-approved','Godkänd'],rejected:['s-rejected','Avvisad']};
+  const[cls,lbl]=m[status]||m.waiting;
+  pill.className=`s-pill ${cls}`;pill.textContent=lbl;
+  const fd=document.getElementById(`findings-${id}`);
+  if(fd) fd.innerHTML=findings.map(f=>`<div class="finding">${f}</div>`).join('');
+}
+
+function setProgress(pct,lbl){
+  document.getElementById('pipeFill').style.width=pct+'%';
+  document.getElementById('pipeLabel').textContent=lbl;
+}
+
+function addMsg(role,text){
+  const msgs=document.getElementById('messages');const div=document.createElement('div');div.className=`msg ${role}`;
+  const now=new Date().toLocaleTimeString('sv-SE',{hour:'2-digit',minute:'2-digit'});
+  const html=text.replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>').replace(/`([^`]+)`/g,'<code>$1</code>').replace(/\n/g,'<br>');
+  div.innerHTML=`<div class="msg-bubble">${html}</div><div class="msg-time">${now}</div>`;
+  msgs.appendChild(div);msgs.scrollTop=msgs.scrollHeight;
+}
+function showTyping(){
+  const msgs=document.getElementById('messages');const id='t'+Date.now();
+  const div=document.createElement('div');div.id=id;div.className='msg assistant';
+  div.innerHTML='<div class="msg-bubble"><div class="typing"><span></span><span></span><span></span></div></div>';
+  msgs.appendChild(div);msgs.scrollTop=msgs.scrollHeight;return id;
+}
+function removeTyping(id){document.getElementById(id)?.remove();}
+
+function openNewProject(){document.getElementById('npModal').classList.add('open');setTimeout(()=>document.getElementById('pName').focus(),80);}
+function closeNewProject(){document.getElementById('npModal').classList.remove('open');['pName','pDesc','pGithub'].forEach(id=>document.getElementById(id).value='');}
+document.getElementById('npModal').addEventListener('click',e=>{if(e.target===document.getElementById('npModal'))closeNewProject();});
+document.getElementById('settingsModal').addEventListener('click',e=>{if(e.target===document.getElementById('settingsModal'))closeSettings();});
+document.getElementById('diffModal').addEventListener('click',e=>{if(e.target===document.getElementById('diffModal'))closeDiff();});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeNewProject();closeDiff();closeSettings();closeErrorModal();closeHistory();}});
+
+async function createProject(){
+  const name=document.getElementById('pName').value.trim();if(!name){document.getElementById('pName').focus();return;}
+  try{
+    const r=await fetch(`${API}/api/projects`,{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({name,description:document.getElementById('pDesc').value.trim(),github:document.getElementById('pGithub').value.trim()})});
+    if(r.ok){
+      const d=await r.json();const pid=d.project.id;
+      closeNewProject();chatHistory=[];document.getElementById('messages').innerHTML='';
+      renderAgents([]);loadAll();
+      onboardingProjectId=pid;onboardingHistory=[];
+      showOnboardingBanner(name);
+      addMsg('assistant','✅ <strong>'+name+'</strong> skapat! Alla minnesfiler är förberedda.\n\n🧠 <strong>Låt oss konfigurera projektet ordentligt</strong> — jag ställer några frågor för att förstå vad vi bygger.\n\nFörsta frågan: <strong>Vilka är de primära användarna och hur ser deras vardag ut?</strong>');
+    } else { const err=await r.text();alert('Fel: '+err); }
+  }catch(e){alert('Kunde inte nå servern.\nFel: '+e);}
+}
+
+function showOnboardingBanner(name){
+  let b=document.getElementById('onboardingBanner');
+  if(!b){
+    b=document.createElement('div');b.id='onboardingBanner';
+    b.style.cssText='background:rgba(99,102,241,.15);border-bottom:1px solid rgba(99,102,241,.4);padding:8px 16px;font-size:12px;display:flex;align-items:center;gap:10px;flex-shrink:0;';
+    const chat=document.getElementById('chatArea')||document.querySelector('.chat');
+    if(chat)chat.insertBefore(b,chat.firstChild);
+  }
+  b.innerHTML='<span style="color:#818cf8;font-weight:700;">🧠 Onboarding-läge</span><span style="color:#a5b4fc;flex:1;">Konfigurerar '+name+' — svara för att generera projektdocs</span><button onclick="skipOnboarding()" style="background:none;border:1px solid rgba(99,102,241,.4);color:#818cf8;border-radius:6px;padding:3px 10px;font-size:11px;cursor:pointer;font-family:inherit;">Hoppa över</button>';
+  b.style.display='flex';
+}
+
+function hideOnboardingBanner(){const b=document.getElementById('onboardingBanner');if(b)b.style.display='none';}
+function skipOnboarding(){onboardingProjectId=null;onboardingHistory=[];hideOnboardingBanner();addMsg('assistant','Onboarding hoppad.');}
+
+// PREVIEW
+let previewUrls={dev:'',prod:'',local:'http://localhost:5173'},previewEnv='dev';
+let devServerRunning=false;
+
+async function openPreview(){
+  document.getElementById('previewModal').classList.add('open');
+  await checkDevServerStatus();
+  if(previewEnv!=='local')await refreshPreview();
+  else switchPreview('local');
+}
+function closePreview(){document.getElementById('previewModal').classList.remove('open');}
+
+async function checkDevServerStatus(){
+  try{const r=await fetch(`${API}/api/dev-server/status`);const d=await r.json();devServerRunning=d.running;updateDevServerBtn();}catch{}
+}
+
+function updateDevServerBtn(){
+  const btn=document.getElementById('devServerBtn');if(!btn)return;
+  if(previewEnv==='local'){
+    btn.style.display='inline-block';
+    if(devServerRunning){btn.textContent='⏹ Stoppa';btn.style.cssText='font-size:11px;padding:3px 10px;background:rgba(239,68,68,.15);border:1px solid var(--red);color:var(--red);border-radius:6px;cursor:pointer;font-family:inherit;';}
+    else{btn.textContent='▶ Starta';btn.style.cssText='font-size:11px;padding:3px 10px;background:rgba(34,197,94,.15);border:1px solid var(--green);color:var(--green);border-radius:6px;cursor:pointer;font-family:inherit;';}
+  } else {btn.style.display='none';}
+}
+
+async function toggleDevServer(){
+  const btn=document.getElementById('devServerBtn');btn.disabled=true;btn.textContent='...';
+  if(devServerRunning){
+    await fetch(`${API}/api/dev-server/stop`,{method:'POST'});
+    devServerRunning=false;
+  } else {
+    const r=await fetch(`${API}/api/dev-server/start`,{method:'POST'});const d=await r.json();
+    if(d.error){alert('Kunde inte starta: '+d.error);btn.disabled=false;updateDevServerBtn();return;}
+    devServerRunning=true;
+    setTimeout(()=>{if(previewEnv==='local'){document.getElementById('previewFrame').style.display='block';document.getElementById('previewEmpty').style.display='none';document.getElementById('previewFrame').src='http://localhost:5173';}},3500);
+  }
+  btn.disabled=false;updateDevServerBtn();
+}
+
+function setPreviewWidth(w){
+  const frame=document.getElementById('previewFrame');
+  if(w==='100%'){frame.style.width='100%';frame.style.margin='0';}
+  else{frame.style.width=w+'px';frame.style.margin='0 auto';}
+}
+
+async function refreshPreview(){
+  document.getElementById('previewUrl').textContent='Hämtar URL...';
+  try{
+    const r=await fetch(`${API}/api/preview`);const d=await r.json();
+    previewUrls={...previewUrls,dev:d.dev_url||'',prod:d.prod_url||''};
+    if(d.error&&!d.dev_url&&!d.prod_url){showPreviewEmpty('Vercel ej konfigurerat',d.error,'Konfigurera Vercel',()=>{closePreview();openSettings();});return;}
+    showPreviewUrl(previewEnv);
+  }catch{document.getElementById('previewUrl').textContent='Kunde inte hämta URL';showPreviewEmpty();}
+}
+
+function showPreviewEmpty(title,msg,btnTxt,btnFn){
+  document.getElementById('previewEmptyTitle').textContent=title||'Ingen preview ännu';
+  document.getElementById('previewEmptyMsg').innerHTML=msg||'Konfigurera Vercel eller starta lokal dev-server.';
+  const btn=document.getElementById('previewEmptyBtn');
+  if(btnTxt){btn.textContent=btnTxt;btn.onclick=btnFn;btn.style.display='inline-block';}else{btn.style.display='none';}
+  document.getElementById('previewEmpty').style.display='flex';
+  document.getElementById('previewFrame').style.display='none';
+}
+
+function showPreviewUrl(env){
+  const url=previewUrls[env];
+  document.getElementById('previewUrl').textContent=url||'Ingen URL hittad';
+  const frame=document.getElementById('previewFrame');const empty=document.getElementById('previewEmpty');
+  if(url){frame.style.display='block';empty.style.display='none';frame.src=url;}
+  else{frame.style.display='none';empty.style.display='flex';}
+}
+
+function switchPreview(env){
+  previewEnv=env;
+  document.getElementById('prevBtnLocal').className='prev-tab'+(env==='local'?' active-dev':'');
+  document.getElementById('prevBtnDev').className='prev-tab'+(env==='dev'?' active-dev':'');
+  document.getElementById('prevBtnProd').className='prev-tab'+(env==='prod'?' active-prod':'');
+  updateDevServerBtn();
+  if(env==='local'){
+    if(devServerRunning){
+      document.getElementById('previewFrame').style.cssText='display:block;width:100%;';
+      document.getElementById('previewFrame').src='http://localhost:5173';
+      document.getElementById('previewEmpty').style.display='none';
+      document.getElementById('previewUrl').textContent='http://localhost:5173';
+    } else {
+      showPreviewEmpty('Lokal server avstängd','Starta dev-servern för att se din app direkt — ingen push krävs.','▶ Starta nu',toggleDevServer);
+    }
+  } else { refreshPreview(); }
+}
+
+function openInNewTab(){const url=previewUrls[previewEnv]||'http://localhost:5173';if(url)window.open(url,'_blank');}
+
+// FELKLISTRAREN
+function openErrorModal(){document.getElementById('errorModal').classList.add('open');setTimeout(()=>document.getElementById('errorInput').focus(),100);}
+function closeErrorModal(){document.getElementById('errorModal').classList.remove('open');}
+
+async function submitError(){
+  const errorText=document.getElementById('errorInput').value.trim();if(!errorText)return;
+  closeErrorModal();
+  addMsg('user','🐛 Fel att fixa:\n```\n'+errorText.slice(0,300)+(errorText.length>300?'...':'')+'\n```');
+  addMsg('assistant','🔍 Analyserar felet och hittar orsaken...');
+  try{
+    await fetch(`${API}/api/fix-error`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({error:errorText})});
+    document.getElementById('errorInput').value='';
+  }catch{addMsg('assistant','Kunde inte nå servern.');}
+}
+
+// VERSIONSHISTORIK
+function escHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+
+async function openHistory(){
+  document.getElementById('historyModal').classList.add('open');
+  const list=document.getElementById('historyList');
+  list.innerHTML='<div style="color:var(--muted);font-size:12px;padding:8px;">Hämtar historik...</div>';
+  try{
+    const r=await fetch(`${API}/api/git/log`);const d=await r.json();
+    if(d.error){list.innerHTML='<div style="color:var(--red);font-size:12px;padding:8px;">'+escHtml(d.error)+'</div>';return;}
+    if(!d.commits||!d.commits.length){list.innerHTML='<div style="color:var(--muted);font-size:12px;padding:8px;">Inga commits ännu.</div>';return;}
+    list.innerHTML=d.commits.map((c,i)=>'<div style="display:flex;align-items:flex-start;gap:10px;padding:8px 10px;background:var(--surface);border:1px solid var(--border);border-radius:8px;">'
+      +'<div style="flex:1;min-width:0;"><div style="font-size:12px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+escHtml(c.message)+'</div>'
+      +'<div style="font-size:10px;color:var(--muted);margin-top:2px;">'+escHtml(c.ago)+' · '+escHtml(c.author)+' · <code style="font-size:10px;">'+c.hash.slice(0,8)+'</code></div></div>'
+      +(i===0?'<span style="font-size:10px;background:rgba(34,197,94,.15);color:var(--green);border-radius:99px;padding:2px 8px;flex-shrink:0;">Senaste</span>'
+        :'<button onclick="confirmRevert(\''+c.hash+'\',\''+escHtml(c.message).replace(/\'/g,"\\'")+'\',this)" style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:var(--red);border-radius:6px;padding:3px 10px;font-size:11px;cursor:pointer;flex-shrink:0;">Återgå</button>')
+      +'</div>').join('');
+  }catch(e){list.innerHTML='<div style="color:var(--red);font-size:12px;padding:8px;">Fel: '+e+'</div>';}
+}
+
+function closeHistory(){document.getElementById('historyModal').classList.remove('open');}
+
+async function confirmRevert(hash,msg,btn){
+  if(!confirm('Återgå till:\n"'+msg+'"\n\nDetta gör en force-push till dev-branch och raderar nyare commits. Fortsätta?'))return;
+  btn.textContent='...';btn.disabled=true;
+  try{
+    const r=await fetch(`${API}/api/git/revert`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({hash})});
+    const d=await r.json();
+    if(d.error){alert('Fel: '+d.error);btn.textContent='Återgå';btn.disabled=false;return;}
+    closeHistory();
+    addMsg('assistant','✅ Återgick till `'+hash.slice(0,8)+'`. Dev-branchen är uppdaterad.');
+  }catch(e){alert('Nätverksfel: '+e);btn.textContent='Återgå';btn.disabled=false;}
+}
+
+// INIT
+async function init(){
+  connectWS();
+  const r=await fetch(`${API}/api/projects`).catch(()=>null);
+  if(!r||!r.ok){addMsg('assistant','⚠️ Kan inte nå servern. Kör start.bat.');return;}
+  const data=await r.json();
+  loadAll();
+  const proj=data.projects.find(p=>p.id===data.active);
+  if(proj){
+    addMsg('assistant','👋 Välkommen till <strong>Ishoo Creator</strong>!\n\nAktivt projekt: <strong>'+proj.name+'</strong>\n\nBeskriv vad du vill bygga, eller välj en feature från kön.');
+  }
+}
+
+init();
+</script>
+</body>
+</html>

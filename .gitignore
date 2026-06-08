@@ -1,0 +1,25 @@
+# Känsliga filer — ALDRIG i git
+settings.json
+.env
+
+# Lokala projekt-repon (klonade kodbaser)
+projects/*/repo/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.venv/
+venv/
+
+# Node
+node_modules/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporärt
+*.log
+pending_changes.json
