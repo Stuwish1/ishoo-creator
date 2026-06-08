@@ -188,6 +188,15 @@ def slug(name: str) -> str:
 def repo_dir(pid: str) -> Path:
     return project_dir(pid) / "repo"
 
+def effective_repo_dir(pid: str) -> Path:
+    """Returnerar rotmappen for ishoo-creator (sjalvforbattring), annars vanlig repo-mapp."""
+    if pid == "ishoo-creator":
+        return Path(".")  # Skriv direkt till C:\innob-agent\
+    return repo_dir(pid)
+
+def is_self_project(pid: str) -> bool:
+    return pid == "ishoo-creator"
+
 def git(rd, *args, **kwargs):
     return subprocess.run(["git", "-C", str(rd)] + list(args),
                           capture_output=True, text=True, **kwargs)
@@ -310,9 +319,21 @@ async def build_code(spec: dict, pid: str) -> tuple[list, str]:
     if not client_inst: return [], "API-nyckel saknas. Lägg till i Inställningar."
     proj = get_active_project()
     if not proj or not proj.get("github"): return [], "Inget GitHub-repo kopplat."
-    rd, err = clone_or_pull(proj["github"], pid)
-    if err: return [], err
-    context = read_codebase_context(rd, spec)
+    if is_self_project(pid):
+        rd = effective_repo_dir(pid)  # Rotmappen direkt
+        # For ishoo-creator: inkludera app.py och index.html som kontext
+        ctx_parts = []
+        for fname in ["app.py", "index.html"]:
+            fp = rd / fname
+            if fp.exists():
+                raw = fp.read_text(encoding="utf-8", errors="ignore")
+                # Trunkera till 8000 tecken per fil for att spara tokens
+                ctx_parts.append(f"=== {fname} ({len(raw)} tecken, visar forsta 8000) ===\n{raw[:8000]}")
+        context = "\n\n".join(ctx_parts) if ctx_parts else "Inga filer hittades."
+    else:
+        rd, err = clone_or_pull(proj["github"], pid)
+        if err: return [], err
+        context = read_codebase_context(rd, spec)
     spec_text = json.dumps(spec, ensure_ascii=False, indent=2)
     try:
         response = client_inst.messages.create(
@@ -326,7 +347,7 @@ async def build_code(spec: dict, pid: str) -> tuple[list, str]:
         return [], f"Kodgenerering misslyckades: {ex}"
 
 def compute_diffs(pid: str, file_changes: list) -> list:
-    rd = repo_dir(pid); diffs = []
+    rd = effective_repo_dir(pid); diffs = []
     for fc in file_changes:
         path=fc.get("path",""); action=fc.get("action","create")
         new_content=fc.get("content",""); description=fc.get("description","")
@@ -354,7 +375,7 @@ def apply_and_push(pid: str, feature_name: str, env: str = "dev") -> str:
     s = load_settings()
     pending = load_pending(pid)
     if not pending: return "Inga väntande ändringar."
-    rd = repo_dir(pid)
+    rd = effective_repo_dir(pid)
     if not rd.exists(): return "Repo-mappen saknas."
 
     dev_branch  = s.get("dev_branch","dev")
@@ -472,12 +493,49 @@ När klart, avsluta MED EXAKT:
 }}
 [/SYSTEM_KLAR]
 
+━━━ FRÅGOR MED ALTERNATIV ━━━
+När du vill ställa en fråga med fasta alternativ, använd EXAKT detta format:
+
+[FRÅGA]
+text: Din fråga här?
+multi: false
+alternativ: Alternativ 1, Alternativ 2, Alternativ 3, Alternativ 4
+[/FRÅGA]
+
+Sätt multi: true om användaren kan välja flera alternativ.
+Max 4 alternativ. Använd alltid svenska.
+Exempel på när du ska använda frågor med alternativ:
+- "Vilken fas? MVP / v1 / v2 / Osäker"
+- "Vilka användare? (välj flera)" med multi: true
+- "Hur komplex?" med alternativ för svårighetsgrad
+
 ━━━ MINNE & KONTEXT ━━━
 PROJEKTMINNE:
 {memory}
 
 FASÖVERSIKT:
 {phases}"""
+
+def parse_fraga(reply: str) -> dict | None:
+    """Parsar [FRÅGA]...[/FRÅGA] block och returnerar strukturerad fråga."""
+    if "[FRÅGA]" not in reply: return None
+    try:
+        s = reply.find("[FRÅGA]") + len("[FRÅGA]")
+        e = reply.find("[/FRÅGA]", s)
+        block = reply[s:e].strip()
+        result = {}
+        for line in block.split("\n"):
+            line = line.strip()
+            if line.startswith("text:"):
+                result["text"] = line[5:].strip()
+            elif line.startswith("multi:"):
+                result["multi"] = line[6:].strip().lower() == "true"
+            elif line.startswith("alternativ:"):
+                alts = [a.strip() for a in line[11:].split(",") if a.strip()]
+                result["options"] = alts[:4]
+        return result if "text" in result and "options" in result else None
+    except:
+        return None
 
 def parse_feature_klar(reply: str) -> dict | None:
     if "[FEATURE_KLAR]" not in reply: return None
@@ -769,7 +827,13 @@ async def chat(payload: dict):
         feature_name=feature_spec.get("name","Okänd")
         add_feature(proj["id"],feature_name,feature_spec.get("phase","MVP"),feature_spec)
     system_config = parse_system_klar(reply)
-    return JSONResponse({"reply":reply,"feature_detected":feature_name,"feature_spec":feature_spec,"system_config":system_config})
+    question = parse_fraga(reply)
+    # Rensa [FRÅGA]-blocket från reply-texten som visas
+    clean_reply = reply
+    if question:
+        import re as _re
+        clean_reply = _re.sub(r'\[FRÅGA\][\s\S]*?\[/FRÅGA\]', '', reply).strip()
+    return JSONResponse({"reply":clean_reply,"feature_detected":feature_name,"feature_spec":feature_spec,"system_config":system_config,"question":question})
 
 # Review
 @app.post("/api/review")
@@ -1457,7 +1521,28 @@ async def build_verify(payload: dict):
     pid = proj["id"]
     s = load_settings()
     client_inst = get_client(s)
-    rd = repo_dir(pid)
+    rd = effective_repo_dir(pid)
+
+    # For ishoo-creator: skippa npm build (ingen package.json) — skriv direkt och returnera OK
+    if is_self_project(pid):
+        pending = load_pending(pid)
+        if not pending:
+            return JSONResponse({"error": "Inga filer att verifiera"}, status_code=400)
+        current_files = list(pending.get("files", []))
+        await manager.broadcast({"type": "build_verify_start", "iteration": 1, "max": 1, "feature": feature_name})
+        for fc in current_files:
+            fpath = rd / fc["path"]
+            if fc.get("action") == "delete":
+                if fpath.exists(): fpath.unlink()
+            else:
+                fpath.parent.mkdir(parents=True, exist_ok=True)
+                fpath.write_text(fc.get("content", ""), encoding="utf-8")
+        await manager.broadcast({"type": "build_verify_running", "message": "Skriver filer direkt till Ishoo Creator..."})
+        diffs = compute_diffs(pid, current_files)
+        store_pending(pid, current_files, feature_name)
+        await manager.broadcast({"type": "build_verify_done", "success": True, "feature": feature_name, "iterations": 1, "diffs": diffs})
+        return JSONResponse({"success": True, "iterations": 1, "diffs": diffs})
+
     if not rd.exists():
         return JSONResponse({"error": "Repo saknas - klona repot forst via Snickaren"}, status_code=400)
     pending = load_pending(pid)

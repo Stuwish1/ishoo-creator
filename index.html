@@ -132,14 +132,30 @@ header h1{font-size:14px;font-weight:700;margin-right:4px;}
 .btn-blue{background:rgba(59,130,246,.9);color:#fff;}
 .btn-outline{background:none;border:1px solid var(--border);color:var(--muted);}
 .btn-outline:hover{color:var(--text);border-color:var(--text);}
-/* CHAT INPUT */
-.chat-input-area{padding:10px 14px;border-top:1px solid var(--border);display:flex;gap:8px;flex-shrink:0;}
-.chat-input{flex:1;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:9px 12px;color:var(--text);font-size:13px;resize:none;height:40px;outline:none;font-family:inherit;transition:border-color .2s;}
-.chat-input:focus{border-color:var(--accent);}
-.send-btn{background:var(--accent);border:none;border-radius:10px;width:40px;height:40px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+/* CHAT INPUT — Lovable-style */
+.chat-input-area{padding:10px 14px 12px;border-top:1px solid var(--border);flex-shrink:0;}
+.chat-input-box{background:var(--surface);border:1px solid var(--border);border-radius:14px;transition:border-color .2s;position:relative;}
+.chat-input-box:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px rgba(99,102,241,.1);}
+.chat-input-box.drag-over{border-color:var(--accent);background:rgba(99,102,241,.05);}
+.chat-input{width:100%;background:transparent;border:none;padding:11px 14px 0;color:var(--text);font-size:13px;resize:none;min-height:44px;max-height:200px;outline:none;font-family:inherit;line-height:1.55;box-sizing:border-box;}
+.chat-img-previews{display:flex;flex-wrap:wrap;gap:6px;padding:6px 12px 0;min-height:0;}
+.chat-img-preview{position:relative;display:inline-flex;}
+.chat-img-preview img{width:56px;height:56px;object-fit:cover;border-radius:8px;border:1px solid var(--border);}
+.chat-img-preview .remove-img{position:absolute;top:-4px;right:-4px;width:16px;height:16px;border-radius:50%;background:#ef4444;border:none;color:#fff;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1;}
+.chat-toolbar{display:flex;align-items:center;gap:4px;padding:6px 10px 8px;}
+.tool-btn{background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer;padding:3px 5px;border-radius:6px;line-height:1;transition:color .15s,background .15s;}
+.tool-btn:hover{color:var(--text);background:var(--bg-2);}
+.tool-btn-label{font-size:11px;color:var(--muted);cursor:pointer;padding:3px 8px;border-radius:6px;transition:color .15s,background .15s;font-family:inherit;background:none;border:none;}
+.tool-btn-label:hover{color:var(--text);background:var(--bg-2);}
+.chat-toolbar-right{margin-left:auto;display:flex;align-items:center;gap:6px;}
+.queue-btn{background:none;border:1px solid var(--border);border-radius:8px;color:var(--muted);font-size:11px;font-weight:500;padding:4px 10px;cursor:pointer;font-family:inherit;transition:all .15s;}
+.queue-btn:hover{border-color:var(--accent);color:var(--accent);}
+.send-btn{background:var(--accent);border:none;border-radius:8px;width:32px;height:32px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
 .send-btn:hover{opacity:.85;}
 .send-btn:disabled{opacity:.35;cursor:not-allowed;}
-.send-btn svg{width:16px;height:16px;fill:#fff;}
+.send-btn svg{width:14px;height:14px;fill:#fff;}
+.drag-hint{position:absolute;inset:0;border-radius:13px;display:flex;align-items:center;justify-content:center;background:rgba(99,102,241,.08);color:var(--accent);font-size:13px;font-weight:500;pointer-events:none;opacity:0;transition:opacity .15s;}
+.chat-input-box.drag-over .drag-hint{opacity:1;}
 /* AGENT PANEL */
 .agent-panel{background:var(--surface);border-left:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;min-height:0;}
 .panel-tabs{display:flex;border-bottom:1px solid var(--border);flex-shrink:0;}
@@ -336,10 +352,24 @@ header h1{font-size:14px;font-weight:700;margin-right:4px;}
   </div>
 
   <div class="chat-input-area">
-    <textarea class="chat-input" id="chatInput" placeholder="Berätta vad du vill bygga, eller 'Lägg till en agent som...'"></textarea>
-    <button class="send-btn" id="sendBtn" onclick="sendMessage()">
-      <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
-    </button>
+    <div class="chat-input-box" id="chatInputBox">
+      <div class="drag-hint">📎 Släpp bild här</div>
+      <div class="chat-img-previews" id="imgPreviews"></div>
+      <textarea class="chat-input" id="chatInput" rows="1"
+        placeholder="Berätta vad du vill bygga, eller dra in en bild..."></textarea>
+      <div class="chat-toolbar">
+        <label class="tool-btn" title="Bifoga bild" style="cursor:pointer;">
+          📎<input type="file" id="imgFileInput" accept="image/*" multiple style="display:none;" onchange="handleImgFiles(this.files)">
+        </label>
+        <button class="tool-btn" title="Rensa" onclick="clearChatInput()" style="font-size:14px;">✕</button>
+        <div class="chat-toolbar-right">
+          <button class="queue-btn" id="queueBtn" onclick="addToQueueFromChat()" title="Lägg till i kön utan att skicka">+ Lägg i kö</button>
+          <button class="send-btn" id="sendBtn" onclick="sendMessage()">
+            <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -660,8 +690,87 @@ let pendingSysConfig=null,currentAgents=[];
 // ─── INIT ─────────────────────────────────────────────────────────────────────
 function init(){
   renderAgents([]); loadAll(); connectWS(); loadArch();
+  // ── Chat-input: auto-resize, drag&drop, kö ───────────────────────────────
   const inp=document.getElementById('chatInput');
-  inp.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage();}});
+  const box=document.getElementById('chatInputBox');
+
+  // Auto-resize textarea
+  inp.addEventListener('input',()=>{
+    inp.style.height='auto';
+    inp.style.height=Math.min(inp.scrollHeight,200)+'px';
+  });
+  inp.addEventListener('keydown',e=>{
+    if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage();}
+  });
+
+  // Drag & drop bilder
+  box.addEventListener('dragover',e=>{e.preventDefault();box.classList.add('drag-over');});
+  box.addEventListener('dragleave',e=>{if(!box.contains(e.relatedTarget))box.classList.remove('drag-over');});
+  box.addEventListener('drop',e=>{
+    e.preventDefault();box.classList.remove('drag-over');
+    const files=[...e.dataTransfer.files].filter(f=>f.type.startsWith('image/'));
+    if(files.length)handleImgFiles(files);
+    else{
+      const url=e.dataTransfer.getData('text/uri-list')||e.dataTransfer.getData('text/plain');
+      if(url&&url.match(/\.(png|jpg|jpeg|gif|webp)/i))addImgUrl(url);
+    }
+  });
+
+  // Klistra in bild med Ctrl+V
+  inp.addEventListener('paste',e=>{
+    const items=[...e.clipboardData.items].filter(i=>i.type.startsWith('image/'));
+    if(!items.length)return;
+    e.preventDefault();
+    items.forEach(item=>{ const f=item.getAsFile(); if(f)handleImgFiles([f]); });
+  });
+
+// Bildbufert
+let attachedImages=[];
+
+function handleImgFiles(files){
+  [...files].forEach(f=>{
+    const reader=new FileReader();
+    reader.onload=ev=>addImgData(ev.target.result,f.name);
+    reader.readAsDataURL(f);
+  });
+}
+function addImgUrl(url){addImgData(url,url.split('/').pop());}
+function addImgData(dataUrl,name){
+  const id='img'+Date.now()+Math.random();
+  attachedImages.push({id,dataUrl,name});
+  const prev=document.getElementById('imgPreviews');
+  const wrap=document.createElement('div');wrap.className='chat-img-preview';wrap.id='prev-'+id;
+  wrap.innerHTML=`<img src="${dataUrl}" title="${name}"><button class="remove-img" onclick="removeImg('${id}')">✕</button>`;
+  prev.appendChild(wrap);
+}
+function removeImg(id){
+  attachedImages=attachedImages.filter(i=>i.id!==id);
+  const el=document.getElementById('prev-'+id);if(el)el.remove();
+}
+function clearChatInput(){
+  document.getElementById('chatInput').value='';
+  document.getElementById('chatInput').style.height='auto';
+  attachedImages=[];
+  document.getElementById('imgPreviews').innerHTML='';
+}
+
+async function addToQueueFromChat(){
+  const inp=document.getElementById('chatInput');
+  const text=inp.value.trim();
+  if(!text){inp.focus();return;}
+  const btn=document.getElementById('queueBtn');
+  btn.textContent='Lägger till...';btn.disabled=true;
+  try{
+    const r=await fetch(`${API}/api/queue`,{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({name:text.slice(0,80),description:text,phase:'MVP',priority:'medium'})});
+    if(r.ok){
+      addMsg('assistant',`📋 Lagt i kön: **${text.slice(0,60)}${text.length>60?'...':''}**`);
+      clearChatInput();
+      loadQueue();
+    }
+  }catch(e){addMsg('assistant','❌ Kunde inte lägga i kön.');}
+  btn.textContent='+ Lägg i kö';btn.disabled=false;
+}
   inp.addEventListener('input',()=>{inp.style.height='auto';inp.style.height=Math.min(inp.scrollHeight,110)+'px';});
 }
 
@@ -833,6 +942,11 @@ async function loadAll(){
     if(a) document.getElementById('activeLabel').textContent=a.name+(a.description?` — ${a.description}`:'');
   }catch{}
   loadFeatures(); loadQueue(); checkOllamaStatus(); setTimeout(loadHealth,1500);
+  // Hämta aktivt projekt-id och återställ chatthistorik
+  fetch(`${API}/api/projects`).then(r=>r.json()).then(d=>{
+    window._activeProjectId=d.active||'default';
+    restoreChatHistory();
+  }).catch(()=>restoreChatHistory());
 }
 
 function renderProjects(data){
@@ -967,9 +1081,19 @@ async function applySystemConfig(){
 
 // ─── CHAT ─────────────────────────────────────────────────────────────────────
 async function sendMessage(){
-  const inp=document.getElementById('chatInput');const text=inp.value.trim();if(!text)return;
-  inp.value='';inp.style.height='40px';document.getElementById('sendBtn').disabled=true;
-  addMsg('user',text);
+  const inp=document.getElementById('chatInput');const text=inp.value.trim();
+  const hasImgs=attachedImages.length>0;
+  if(!text&&!hasImgs)return;
+  const imgs=[...attachedImages];
+  clearChatInput();
+  document.getElementById('sendBtn').disabled=true;
+  // Visa user-meddelande med bilder
+  let userHtml=text?`<div>${text.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</div>`:'';
+  if(imgs.length) userHtml+=imgs.map(i=>`<img src="${i.dataUrl}" style="max-width:180px;border-radius:8px;margin-top:4px;display:block;">`).join('');
+  addMsg('user',userHtml,true);
+  const fullText=text+(imgs.length?`
+
+[${imgs.length} bild(er) bifogad(e)]`:'');
   const tid=showTyping();
   try{
     // Onboarding-läge: skicka till onboarding-endpoint
@@ -1524,12 +1648,41 @@ function setProgress(pct,lbl){
   document.getElementById('pipeLabel').textContent=lbl;
 }
 
-function addMsg(role,text){
+function addMsg(role,text,isHtml=false){
   const msgs=document.getElementById('messages');const div=document.createElement('div');div.className=`msg ${role}`;
   const now=new Date().toLocaleTimeString('sv-SE',{hour:'2-digit',minute:'2-digit'});
-  const html=text.replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>').replace(/`([^`]+)`/g,'<code>$1</code>').replace(/\n/g,'<br>');
+  const html=isHtml?text:text.replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>').replace(/`([^`]+)`/g,'<code>$1</code>').replace(/\n/g,'<br>');
   div.innerHTML=`<div class="msg-bubble">${html}</div><div class="msg-time">${now}</div>`;
   msgs.appendChild(div);msgs.scrollTop=msgs.scrollHeight;
+  // Spara i localStorage (max 40 meddelanden)
+  try{
+    const proj=window._activeProjectId||'default';
+    const key='chat_'+proj;
+    const hist=JSON.parse(localStorage.getItem(key)||'[]');
+    hist.push({role,html,time:now});
+    if(hist.length>40)hist.splice(0,hist.length-40);
+    localStorage.setItem(key,JSON.stringify(hist));
+  }catch(e){}
+}
+
+function restoreChatHistory(){
+  try{
+    const proj=window._activeProjectId||'default';
+    const hist=JSON.parse(localStorage.getItem('chat_'+proj)||'[]');
+    if(!hist.length)return;
+    const msgs=document.getElementById('messages');
+    hist.forEach(m=>{
+      const div=document.createElement('div');div.className=`msg ${m.role}`;
+      div.innerHTML=`<div class="msg-bubble">${m.html}</div><div class="msg-time">${m.time}</div>`;
+      msgs.appendChild(div);
+    });
+    msgs.scrollTop=msgs.scrollHeight;
+  }catch(e){}
+}
+
+function clearChatForProject(pid){
+  try{localStorage.removeItem('chat_'+(pid||'default'));}catch(e){}
+  chatHistory=[];document.getElementById('messages').innerHTML='';
 }
 function showTyping(){
   const msgs=document.getElementById('messages');const id='t'+Date.now();
@@ -1553,7 +1706,8 @@ async function createProject(){
       body:JSON.stringify({name,description:document.getElementById('pDesc').value.trim(),github:document.getElementById('pGithub').value.trim()})});
     if(r.ok){
       const d=await r.json();const pid=d.project.id;
-      closeNewProject();chatHistory=[];document.getElementById('messages').innerHTML='';
+      closeNewProject();clearChatForProject(pid);
+      window._activeProjectId=pid;
       renderAgents([]);loadAll();
       onboardingProjectId=pid;onboardingHistory=[];
       showOnboardingBanner(name);
