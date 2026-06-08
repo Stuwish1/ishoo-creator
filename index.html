@@ -712,55 +712,10 @@ let ws=null,chatHistory=[],currentFeature=null,currentSpecObj=null;
 let currentDiffs=[],agentsDone=0,phaseFilter='all',currentEnv='dev',appState='idle';
 let onboardingProjectId=null,onboardingHistory=[];
 let pendingSysConfig=null,currentAgents=[];
-
-// ─── INIT ─────────────────────────────────────────────────────────────────────
-function init(){
-  renderAgents([]); loadAll(); connectWS(); loadArch();
-  // ── Chat-input: auto-resize, drag&drop, kö ───────────────────────────────
-  const inp=document.getElementById('chatInput');
-  const box=document.getElementById('chatInputBox');
-
-  // Auto-resize textarea
-  inp.addEventListener('input',()=>{
-    inp.style.height='auto';
-    inp.style.height=Math.min(inp.scrollHeight,200)+'px';
-  });
-  inp.addEventListener('keydown',e=>{
-    if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage();}
-  });
-
-  // Drag & drop bilder
-  box.addEventListener('dragover',e=>{e.preventDefault();box.classList.add('drag-over');});
-  box.addEventListener('dragleave',e=>{if(!box.contains(e.relatedTarget))box.classList.remove('drag-over');});
-  box.addEventListener('drop',e=>{
-    e.preventDefault();box.classList.remove('drag-over');
-    const files=[...e.dataTransfer.files].filter(f=>f.type.startsWith('image/'));
-    if(files.length)handleImgFiles(files);
-    else{
-      const url=e.dataTransfer.getData('text/uri-list')||e.dataTransfer.getData('text/plain');
-      if(url&&url.match(/\.(png|jpg|jpeg|gif|webp)/i))addImgUrl(url);
-    }
-  });
-
-  // Klistra in bild med Ctrl+V i chatInput
-  inp.addEventListener('paste',e=>{
-    const items=[...e.clipboardData.items].filter(i=>i.type.startsWith('image/'));
-    if(!items.length)return;
-    e.preventDefault();
-    e.stopPropagation(); // hindra document-lyssnaren
-    items.forEach(item=>{ const f=item.getAsFile(); if(f)handleImgFiles([f]); });
-  });
-
-// Bildbufert
 let attachedImages=[];
 
-function handleImgFiles(files){
-  [...files].forEach(f=>{
-    const reader=new FileReader();
-    reader.onload=ev=>addImgData(ev.target.result,f.name);
-    reader.readAsDataURL(f);
-  });
-}
+// ─── INIT ─────────────────────────────────────────────────────────────────────
+
 function addImgUrl(url){addImgData(url,url.split('/').pop());}
 function addImgData(dataUrl,name){
   const id='img'+Date.now()+Math.random();
@@ -797,8 +752,6 @@ async function addToQueueFromChat(){
     }
   }catch(e){addMsg('assistant','❌ Kunde inte lägga i kön.');}
   btn.textContent='+ Lägg i kö';btn.disabled=false;
-}
-  inp.addEventListener('input',()=>{inp.style.height='auto';inp.style.height=Math.min(inp.scrollHeight,110)+'px';});
 }
 
 // ─── ENV ──────────────────────────────────────────────────────────────────────
@@ -1970,15 +1923,57 @@ async function confirmRevert(hash,msg,btn){
 }
 
 // INIT
+// ── Koppla chatInput-händelser direkt (körs när DOM är redo) ─────────────────
+(function setupChatInput(){
+  const inp = document.getElementById('chatInput');
+  const box = document.getElementById('chatInputBox');
+  if(!inp || !box) return;
+
+  // Enter skickar, Shift+Enter ny rad
+  inp.addEventListener('keydown', e => {
+    if(e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); sendMessage(); }
+  });
+
+  // Auto-resize
+  inp.addEventListener('input', () => {
+    inp.style.height = 'auto';
+    inp.style.height = Math.min(inp.scrollHeight, 200) + 'px';
+  });
+
+  // Drag & drop bilder
+  box.addEventListener('dragover', e => { e.preventDefault(); box.classList.add('drag-over'); });
+  box.addEventListener('dragleave', e => { if(!box.contains(e.relatedTarget)) box.classList.remove('drag-over'); });
+  box.addEventListener('drop', e => {
+    e.preventDefault(); box.classList.remove('drag-over');
+    const files = [...e.dataTransfer.files].filter(f => f.type.startsWith('image/'));
+    if(files.length) handleImgFiles(files);
+    else {
+      const url = e.dataTransfer.getData('text/uri-list') || e.dataTransfer.getData('text/plain');
+      if(url && url.match(/\.(png|jpg|jpeg|gif|webp)/i)) addImgUrl(url);
+    }
+  });
+
+  // Klistra in bild med Ctrl+V i chatInput
+  inp.addEventListener('paste', e => {
+    const items = [...e.clipboardData.items].filter(i => i.type.startsWith('image/'));
+    if(!items.length) return;
+    e.preventDefault();
+    e.stopPropagation();
+    items.forEach(item => { const f = item.getAsFile(); if(f) handleImgFiles([f]); });
+  });
+})();
+
 async function init(){
   connectWS();
   const r=await fetch(`${API}/api/projects`).catch(()=>null);
   if(!r||!r.ok){addMsg('assistant','⚠️ Kan inte nå servern. Kör start.bat.');return;}
   const data=await r.json();
   loadAll();
+  window._activeProjectId = data.active || 'default';
+  restoreChatHistory();
   const proj=data.projects.find(p=>p.id===data.active);
-  if(proj){
-    addMsg('assistant','👋 Välkommen till <strong>Ishoo Creator</strong>!\n\nAktivt projekt: <strong>'+proj.name+'</strong>\n\nBeskriv vad du vill bygga, eller välj en feature från kön.');
+  if(proj && !document.querySelector('.msg')){
+    addMsg('assistant','👋 Välkommen till <strong>Ishoo Creator</strong>!\n\nAktivt projekt: <strong>'+proj.name+'</strong>\n\nBeskriv vad du vill bygga, eller välj en feature från kön.',true);
   }
 }
 

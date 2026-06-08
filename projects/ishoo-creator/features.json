@@ -1,0 +1,30 @@
+[
+  {
+    "id": 1,
+    "name": "Split-view Live Preview",
+    "phase": "MVP",
+    "status": "Granskas",
+    "spec": {
+      "name": "Split-view Live Preview",
+      "phase": "MVP",
+      "problem": "Användaren måste öppna en separat flik/fönster för att se appen, vilket gör iterationen långsam och kontextbrytande",
+      "solution": "Split-view layout där chatten visas till vänster och en iframe med localhost dev-server visas till höger. På från start som default. På mobil/liten skärm visas en toggle-knapp för att växla mellan chat och preview.",
+      "users": "Utvecklare som bygger appar med Ishoo Creator lokalt",
+      "acceptance_criteria": [
+        "Split-view är aktivt som default när dev-servern körs",
+        "iframe pekar på localhost:PORT från dev-servern",
+        "Preview refreshas automatiskt när ny kod pushats",
+        "Toggle-knapp visas på skärmar < 768px för att växla chat/preview",
+        "Preview-panel kan manuellt stängas/öppnas via knapp även på desktop"
+      ],
+      "dependencies": [
+        "Lokal dev server (finns redan)"
+      ],
+      "risks": [
+        "iframe blockeras av vissa frameworks (CSP/X-Frame-Options) — behöver testas per projekt",
+        "Port-detektering kan vara opålitlig om dev-servern startar på annan port"
+      ]
+    },
+    "created": "2026-06-09T00:46:47.844776"
+  }
+]
