@@ -107,6 +107,22 @@ header h1{font-size:14px;font-weight:700;margin-right:4px;}
 .typing span{display:inline-block;width:5px;height:5px;background:var(--muted);border-radius:50%;margin:0 2px;animation:bounce .9s infinite;}
 .typing span:nth-child(2){animation-delay:.15s;}
 .typing span:nth-child(3){animation-delay:.3s;}
+/* OPTIONS PICKER — Lovable-style */
+.options-picker{padding:10px 14px;border-top:1px solid var(--border);background:var(--bg-2);flex-shrink:0;display:none;}
+.options-picker.show{display:block;}
+.options-question{font-size:12px;color:var(--muted);margin-bottom:8px;font-weight:500;}
+.options-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;}
+.option-chip{padding:6px 14px;border-radius:99px;border:1.5px solid var(--border);background:none;color:var(--text);font-size:12px;cursor:pointer;font-family:inherit;transition:all .15s;display:flex;align-items:center;gap:5px;}
+.option-chip:hover{border-color:var(--accent);color:var(--accent);}
+.option-chip.selected{border-color:var(--accent);background:rgba(99,102,241,.12);color:var(--accent);font-weight:500;}
+.option-chip .check{width:14px;height:14px;border-radius:3px;border:1.5px solid currentColor;display:inline-flex;align-items:center;justify-content:center;font-size:9px;flex-shrink:0;}
+.option-chip.selected .check::after{content:'✓';}
+.options-actions{display:flex;align-items:center;gap:8px;}
+.options-submit{background:var(--accent);color:#fff;border:none;border-radius:8px;padding:7px 18px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:opacity .15s;}
+.options-submit:hover{opacity:.85;}
+.options-submit:disabled{opacity:.35;cursor:not-allowed;}
+.options-skip{background:none;border:none;color:var(--muted);font-size:11px;cursor:pointer;font-family:inherit;padding:4px 8px;}
+.options-skip:hover{color:var(--text);}
 /* SUGGESTIONS */
 .suggestions-bar{padding:8px 14px;border-top:1px solid var(--border);background:rgba(99,102,241,.04);flex-shrink:0;}
 .sug-label{font-size:10px;color:var(--muted);margin-bottom:5px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;}
@@ -349,6 +365,16 @@ header h1{font-size:14px;font-weight:700;margin-right:4px;}
     <span class="action-label" id="actionLabel"></span>
     <button class="btn btn-primary" id="actionBtn1" onclick="handleAction1()"></button>
     <button class="btn btn-outline" id="actionBtn2" onclick="handleAction2()"></button>
+  </div>
+
+  <!-- OPTIONS PICKER -->
+  <div class="options-picker" id="optionsPicker">
+    <div class="options-question" id="optionsQuestion"></div>
+    <div class="options-chips" id="optionsChips"></div>
+    <div class="options-actions">
+      <button class="options-submit" id="optionsSubmit" onclick="submitOptions()" disabled>Skicka</button>
+      <button class="options-skip" onclick="skipOptions()">Skriv eget svar ↓</button>
+    </div>
   </div>
 
   <div class="chat-input-area">
@@ -716,11 +742,12 @@ function init(){
     }
   });
 
-  // Klistra in bild med Ctrl+V
+  // Klistra in bild med Ctrl+V i chatInput
   inp.addEventListener('paste',e=>{
     const items=[...e.clipboardData.items].filter(i=>i.type.startsWith('image/'));
     if(!items.length)return;
     e.preventDefault();
+    e.stopPropagation(); // hindra document-lyssnaren
     items.forEach(item=>{ const f=item.getAsFile(); if(f)handleImgFiles([f]); });
   });
 
@@ -1126,6 +1153,8 @@ async function sendMessage(){
       const d=await r.json(); removeTyping(tid);
       let display=d.reply.replace(/\[FEATURE_KLAR\][\s\S]*?\[\/FEATURE_KLAR\]/g,'').replace(/\[SYSTEM_KLAR\][\s\S]*?\[\/SYSTEM_KLAR\]/g,'').trim();
       addMsg('assistant',display);chatHistory.push({role:'assistant',content:d.reply});
+      if(d.question) showOptions(d.question);
+      else hideOptions();
       if(d.feature_detected&&d.feature_spec){
         currentFeature=d.feature_detected;currentSpecObj=d.feature_spec;
         const ac=d.feature_spec.acceptance_criteria;
@@ -1336,6 +1365,74 @@ async function loadHealth(){
     document.getElementById('healthBody').innerHTML=`<div style="color:var(--red);padding:16px;">Kunde inte nå servern: ${e}</div>`;
   }
 }
+
+// ─── Options picker ─────────────────────────────────────────────────────────
+let _optionsMulti = false;
+let _optionsSelected = new Set();
+
+function showOptions(question){
+  if(!question||!question.options||!question.options.length) return;
+  _optionsMulti = !!question.multi;
+  _optionsSelected = new Set();
+  document.getElementById('optionsQuestion').textContent = question.text || '';
+  const chips = document.getElementById('optionsChips');
+  chips.innerHTML = '';
+  question.options.forEach(opt => {
+    const btn = document.createElement('button');
+    btn.className = 'option-chip';
+    btn.innerHTML = _optionsMulti
+      ? `<span class="check"></span>${opt}`
+      : opt;
+    btn.dataset.value = opt;
+    btn.onclick = () => toggleOption(btn, opt);
+    chips.appendChild(btn);
+  });
+  document.getElementById('optionsPicker').classList.add('show');
+  document.getElementById('optionsSubmit').disabled = true;
+}
+
+function toggleOption(btn, val){
+  if(_optionsMulti){
+    if(_optionsSelected.has(val)){ _optionsSelected.delete(val); btn.classList.remove('selected'); }
+    else { _optionsSelected.add(val); btn.classList.add('selected'); }
+  } else {
+    document.querySelectorAll('.option-chip').forEach(b => b.classList.remove('selected'));
+    _optionsSelected = new Set([val]);
+    btn.classList.add('selected');
+  }
+  document.getElementById('optionsSubmit').disabled = _optionsSelected.size === 0;
+}
+
+function submitOptions(){
+  const vals = [..._optionsSelected];
+  if(!vals.length) return;
+  hideOptions();
+  const text = vals.join(', ');
+  document.getElementById('chatInput').value = text;
+  sendMessage();
+}
+
+function skipOptions(){
+  hideOptions();
+  document.getElementById('chatInput').focus();
+}
+
+function hideOptions(){
+  document.getElementById('optionsPicker').classList.remove('show');
+  _optionsSelected = new Set();
+}
+
+// ─── Klistra in skärmbilder var som helst på sidan ───────────────────────────
+document.addEventListener('paste', e => {
+  // Ignorera om användaren klistrar i ett textfält (hanteras av inp-lyssnaren)
+  if(e.target === document.getElementById('chatInput')) return;
+  const items = [...e.clipboardData.items].filter(i => i.type.startsWith('image/'));
+  if(!items.length) return;
+  e.preventDefault();
+  items.forEach(item => { const f = item.getAsFile(); if(f) handleImgFiles([f]); });
+  // Fokusera chatInput så användaren ser bilden
+  document.getElementById('chatInput').focus();
+});
 
 // ─── Git status-polling ──────────────────────────────────────────────────────
 async function checkGitStatus(){
