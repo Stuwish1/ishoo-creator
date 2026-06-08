@@ -26,5 +26,36 @@
       ]
     },
     "created": "2026-06-09T00:46:47.844776"
+  },
+  {
+    "id": 2,
+    "name": "Split-view Live Preview",
+    "phase": "MVP",
+    "status": "Granskas",
+    "spec": {
+      "name": "Split-view Live Preview",
+      "phase": "MVP",
+      "problem": "Användaren måste byta fönster för att se appen — bryter flödet och gör det svårare att iterera snabbt",
+      "solution": "Dela UI i två kolumner: chat till vänster, live iframe till höger. Iframe visar dev serverns URL när den körs. När dev server är stoppad visas grå yta med 'Starta dev server'-knapp. Split-view aktiveras/inaktiveras via en knapp i headern.",
+      "users": "Utvecklare som aktivt bygger och itererar på sin app i Ishoo Creator",
+      "acceptance_criteria": [
+        "En knapp i headern togglar split-view on/off",
+        "När split-view är på: chat tar 50% bredd till vänster, preview tar 50% till höger",
+        "Preview-ytan visar en iframe med dev serverns URL (t.ex. localhost:3000) när dev server körs",
+        "När dev server inte körs visas grå yta med texten 'Dev server körs inte' och en 'Starta dev server'-knapp",
+        "Klick på 'Starta dev server' i preview-ytan startar dev servern (samma logik som befintlig start-knapp)",
+        "När dev server startas uppdateras iframe automatiskt med korrekt URL",
+        "Split-view fungerar responsivt — på smal skärm döljs preview automatiskt",
+        "State sparas i localStorage så split-view förblir på/av efter reload"
+      ],
+      "dependencies": [
+        "Befintlig dev server start/stop logik i app.py och index.html"
+      ],
+      "risks": [
+        "Iframe kan blockeras av CORS/X-Frame-Options beroende på vilket ramverk projektet använder",
+        "På mycket liten skärm kan split-view bli oanvändbar — kräver responsiv fallback"
+      ]
+    },
+    "created": "2026-06-09T00:52:07.920522"
   }
 ]

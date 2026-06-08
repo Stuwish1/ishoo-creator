@@ -338,11 +338,35 @@ async def build_code(spec: dict, pid: str) -> tuple[list, str]:
     try:
         response = client_inst.messages.create(
             model=model_for("snickare", s), max_tokens=8000, system=SNICKARE_PROMPT,
-            messages=[{"role":"user","content":f"FEATURE-SPEC:\n{spec_text}\n\nBEFINTLIG KODBAS:\n{context}\n\nGenerera koden nu. Returnera ENBART JSON."}])
+            messages=[{"role":"user","content":f"FEATURE-SPEC:\n{spec_text}\n\nBEFINTLIG KODBAS:\n{context}\n\nGenerera koden nu. Returnera ENBART XML-format enligt instruktionen."}])
         text = response.content[0].text.strip()
-        s2, e = text.find("{"), text.rfind("}")+1
-        data = json.loads(text[s2:e]) if s2 != -1 else {}
-        return data.get("files",[]), data.get("summary","")
+        import re as _re
+        # Parsa XML-format
+        files, summary = [], ""
+        sm = _re.search(r"<summary>(.*?)</summary>", text, _re.DOTALL)
+        if sm: summary = sm.group(1).strip()
+        for fm in _re.finditer(r"<file>(.*?)</file>", text, _re.DOTALL):
+            blk = fm.group(1)
+            def _tag(t, b=blk):
+                m = _re.search(rf"<{t}>(.*?)</{t}>", b, _re.DOTALL)
+                return m.group(1).strip() if m else ""
+            p2 = _tag("path"); act = _tag("action") or "create"
+            desc = _tag("description")
+            cm = _re.search(r"<content>(.*?)</content>", blk, _re.DOTALL)
+            code = cm.group(1).lstrip("\n") if cm else ""
+            if p2: files.append({"path":p2,"action":act,"content":code,"description":desc})
+        if not files:
+            # Fallback: JSON om Claude missade instruktionen
+            try:
+                s2, e2 = text.find("{"), text.rfind("}")+1
+                d2 = json.loads(text[s2:e2]) if s2!=-1 else {}
+                files = d2.get("files",[])
+                summary = d2.get("summary", summary)
+            except Exception:
+                pass
+        if not files:
+            return [], f"Snickaren returnerade ogiltigt format. ({len(text)} tecken)"
+        return files, summary
     except Exception as ex:
         return [], f"Kodgenerering misslyckades: {ex}"
 
@@ -445,14 +469,16 @@ GITHUB: {project_github}
 Du hanterar TWO typer av förfrågningar:
 
 ━━━ TYP 1: FEATURE (bygga ny funktionalitet) ━━━
-När användaren vill bygga något i projektet, ställ dessa frågor en eller två i taget:
-1. VEM använder detta, i vilket sammanhang och hur ofta?
-2. VILKET PROBLEM löser det egentligen?
-3. VAD HÄNDER om featuren inte finns — hur löser man det idag?
-4. HUR MÄTER VI att featuren är klar? (konkreta acceptanskriterier)
-5. BEROENDEN — hänger detta på något som inte är byggt?
-6. RISKER — vad kan gå fel tekniskt eller affärsmässigt?
-7. FAS — MVP (måste ha nu), v1 (bör ha) eller v2 (framtiden)?
+Var BESLUTSSAM och SNABB. Ställ max 1-2 korta frågor, sedan kör.
+Om du kan gissa rimliga svar på saknade detaljer — gör det och berätta vad du antog.
+
+Samla MINST detta innan du avslutar:
+- Vad ska byggas (redan känt från användarens meddelande)
+- Vem använder det (gissa om oklart)
+- Acceptanskriterier — 2-4 konkreta punkter
+- Fas: MVP / v1 / v2 (fråga EN gång om oklart, annars MVP)
+
+Jobba som en senior utvecklare: förstå intentionen, fyll i rimliga gap, kör.
 
 När klart, avsluta MED EXAKT:
 [FEATURE_KLAR]
