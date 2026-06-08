@@ -36,32 +36,54 @@ HAIKU_DEFAULT  = "claude-haiku-4-5-20251001"
 # ─── Settings ─────────────────────────────────────────────────────────────────
 
 DEFAULT_AGENTS = [
+    # ── Säkerhet ────────────────────────────────────────────────────────────────
     {"id":"security","name":"Säkerhetsansvarig","emoji":"🔒","model":"sonnet","enabled":True,
-     "prompt":'Du är säkerhetsexpert för React/TypeScript/Supabase. Granska spec/kod för: SQL injection, XSS, exponerade nycklar, saknad RLS, felaktig auth. Returnera ENBART JSON: {"status":"GODKÄND"/"AVVISAD","findings":["..."],"severity":"LOW"/"MEDIUM"/"HIGH","suggestions":["..."]}'},
+     "prompt":'Du ansvarar ENBART för säkerhet. Granska: SQL-injection, XSS, exponerade API-nycklar, saknad RLS i Supabase, felaktig autentisering/auktorisering, CSRF. Säg inget om annat. Returnera ENBART JSON: {"status":"GODKÄND"/"AVVISAD","findings":["..."],"severity":"LOW"/"MEDIUM"/"HIGH","suggestions":["..."]}'},
+
+    # ── Databas ─────────────────────────────────────────────────────────────────
     {"id":"dba","name":"DBA","emoji":"🗄️","model":"ollama:qwen2.5-coder:7b","enabled":True,
-     "prompt":'Du är databasexpert för PostgreSQL/Supabase. Granska för: farliga migrationer, saknade index, N+1, saknad RLS. Returnera ENBART JSON: {"status":"GODKÄND"/"AVVISAD","findings":["..."],"severity":"LOW"/"MEDIUM"/"HIGH","suggestions":["..."]}'},
-    {"id":"conflict","name":"Konfliktgranskare","emoji":"🔍","model":"ollama:qwen2.5-coder:7b","enabled":True,
-     "prompt":'Du är kodarkitekt. Granska för: duplicerad kod, namnkonflikter, brutna konventioner. Returnera ENBART JSON: {"status":"GODKÄND"/"AVVISAD","findings":["..."],"severity":"LOW"/"MEDIUM"/"HIGH","suggestions":["..."]}'},
-    {"id":"ux","name":"UX + Buggletare","emoji":"🎨","model":"haiku","enabled":True,
-     "prompt":'Du är UX-expert och buggletare. Granska mot acceptanskriterier, edge cases, loading states, tillgänglighet. Returnera ENBART JSON: {"status":"GODKÄND"/"AVVISAD","findings":["..."],"severity":"LOW"/"MEDIUM"/"HIGH","suggestions":["..."]}'},
-    {"id":"architect","name":"Arkitektur","emoji":"🏗️","model":"sonnet","enabled":True,
-     "prompt":'Du är mjukvaruarkitekt för React/TypeScript/Vite. Granska för: separation of concerns, hooks, prop drilling. Returnera ENBART JSON: {"status":"GODKÄND"/"AVVISAD","findings":["..."],"severity":"LOW"/"MEDIUM"/"HIGH","suggestions":["..."]}'},
-    {"id":"performance","name":"Prestandagranskare","emoji":"⚡","model":"ollama:qwen2.5-coder:7b","enabled":True,
-     "prompt":'Du är prestandaexpert för React/TypeScript/Vite. Granska för: onödiga re-renders, tunga beräkningar i render, saknad memoization, stora bundles, långsamma queries. Returnera ENBART JSON: {"status":"GODKÄND"/"AVVISAD","findings":["..."],"severity":"LOW"/"MEDIUM"/"HIGH","suggestions":["..."]}'},
-    {"id":"tester","name":"Testgranskare","emoji":"🧪","model":"ollama:qwen2.5-coder:7b","enabled":True,
-     "prompt":'Du är testexpert för React/TypeScript. Granska för: saknade edge case-tester, otestade felflöden, saknade tillgänglighetstester, bristande mockar. Returnera ENBART JSON: {"status":"GODKÄND"/"AVVISAD","findings":["..."],"severity":"LOW"/"MEDIUM"/"HIGH","suggestions":["..."]}'},
-    {"id":"mobile","name":"Mobilanvändare","emoji":"📱","model":"ollama:llama3.2:3b","enabled":True,
-     "prompt":'Du är en vardaglig mobilanvändare. Testa om featuren fungerar på liten skärm, med touch, långsamt nätverk, begränsat batteri. Returnera ENBART JSON: {"status":"GODKÄND"/"AVVISAD","findings":["..."],"severity":"LOW"/"MEDIUM"/"HIGH","suggestions":["..."]}'},
+     "prompt":'Du ansvarar ENBART för databas. Granska: farliga migreringar, saknade index, N+1-queries, saknad RLS, ineffektiva joins. Kommentera inte kod-arkitektur eller UI. Returnera ENBART JSON: {"status":"GODKÄND"/"AVVISAD","findings":["..."],"severity":"LOW"/"MEDIUM"/"HIGH","suggestions":["..."]}'},
+
+    # ── Arkitektur ───────────────────────────────────────────────────────────────
+    {"id":"architect","name":"Arkitekt","emoji":"🏗️","model":"sonnet","enabled":True,
+     "prompt":'Du ansvarar ENBART för systemarkitektur. Granska: separation of concerns, onödig prop drilling, felaktiga beroenden mellan moduler, duplicerad affärslogik, felplacerad kod (logik i UI-lager, data i presentationslager). Kommentera inte säkerhet, prestanda eller UX. Returnera ENBART JSON: {"status":"GODKÄND"/"AVVISAD","findings":["..."],"severity":"LOW"/"MEDIUM"/"HIGH","suggestions":["..."]}'},
+
+    # ── Ansvarsfördelning ────────────────────────────────────────────────────────
+    {"id":"ansvarsfordelning","name":"Ansvarsfördelning","emoji":"⚖️","model":"sonnet","enabled":True,
+     "prompt":'Du ansvarar ENBART för tydlig ansvarsfördelning (Single Responsibility). Granska: har varje funktion/komponent ett enda ansvar? Finns det God Objects som gör för mycket? Är gränssnitten tydliga mellan lager (hooks ↔ komponenter ↔ API)? Är det tydligt vem som äger vilken data? Saknas abstraktioner som borde extraheras? Returnera ENBART JSON: {"status":"GODKÄND"/"AVVISAD","findings":["..."],"severity":"LOW"/"MEDIUM"/"HIGH","suggestions":["..."]}'},
+
+    # ── Prestanda ────────────────────────────────────────────────────────────────
+    {"id":"performance","name":"Prestanda","emoji":"⚡","model":"ollama:qwen2.5-coder:7b","enabled":True,
+     "prompt":'Du ansvarar ENBART för prestanda. Granska: onödiga re-renders, saknad useMemo/useCallback, tunga beräkningar i render-loop, stora bundle-imports, saknad lazy loading, långsamma Supabase-queries, saknad paginering. Kommentera inte säkerhet eller arkitektur. Returnera ENBART JSON: {"status":"GODKÄND"/"AVVISAD","findings":["..."],"severity":"LOW"/"MEDIUM"/"HIGH","suggestions":["..."]}'},
+
+    # ── UX ───────────────────────────────────────────────────────────────────────
+    {"id":"ux","name":"UX-granskare","emoji":"🎨","model":"haiku","enabled":True,
+     "prompt":'Du ansvarar ENBART för användarupplevelse. Granska: uppfylls acceptanskriterierna? Finns loading states, error states, tomma states? Är flödet intuitivt? Saknas feedback till användaren? Kommentera inte kod-struktur eller databas. Returnera ENBART JSON: {"status":"GODKÄND"/"AVVISAD","findings":["..."],"severity":"LOW"/"MEDIUM"/"HIGH","suggestions":["..."]}'},
+
+    # ── Mobil ────────────────────────────────────────────────────────────────────
+    {"id":"mobile","name":"Mobil/Fält","emoji":"📱","model":"haiku","enabled":True,
+     "prompt":'Du ansvarar ENBART för mobil- och fältanvändning. Granska: touchmål under 44px, dålig läsbarhet i solljus, för många steg för vanliga uppgifter, saknad offline-hantering, onödiga formulärfält. Tänk: handskebeklädd tumme, stressig situation. Returnera ENBART JSON: {"status":"GODKÄND"/"AVVISAD","findings":["..."],"severity":"LOW"/"MEDIUM"/"HIGH","suggestions":["..."]}'},
+
+    # ── Testbarhet ───────────────────────────────────────────────────────────────
+    {"id":"tester","name":"Testbarhet","emoji":"🧪","model":"ollama:qwen2.5-coder:7b","enabled":True,
+     "prompt":'Du ansvarar ENBART för testbarhet. Granska: är koden testbar (inga side effects i render, tydliga inputs/outputs)? Vilka edge cases saknar täckning? null/undefined-scenarier, nätverksfel, tomma listor, race conditions. Lista de 3 viktigaste saknade testfallen. Returnera ENBART JSON: {"status":"GODKÄND"/"AVVISAD","findings":["..."],"severity":"LOW"/"MEDIUM"/"HIGH","suggestions":["..."]}'},
+
+    # ── Inspector (sista grinden) ─────────────────────────────────────────────
     {"id":"inspector","name":"Besiktningsman","emoji":"✅","model":"sonnet","enabled":True,"is_inspector":True,
-     "prompt":'Du är besiktningsman. Bedöm om koden/specen är redo. Godkänn om inga HIGH-problem. Returnera ENBART JSON: {"status":"GODKÄND"/"AVVISAD","findings":["..."],"severity":"LOW"/"MEDIUM"/"HIGH","suggestions":["..."]}'},
-    {"id":"business-logic","name":"Affärslogik","emoji":"🧠","model":"sonnet","enabled":True,
-     "prompt":'Du är expert på affärslogik och domänregler. Granska spec/kod för: ofullständig affärslogik, saknade edge cases, inkonsekvent datahantering, felaktiga beräkningar, statusproblem, saknade valideringsregler. Tänk: vad händer om användaren gör X, Y, Z utanför happy path? Returnera ENBART JSON: {"status":"GODKÄND"/"AVVISAD","findings":["..."],"severity":"LOW"/"MEDIUM"/"HIGH","suggestions":["..."]}'},
-    {"id":"test-generator","name":"Testgranskare","emoji":"🧪","model":"haiku","enabled":True,
-     "prompt":'Du är testexpert. Granska spec/kod ur testperspektiv: identifiera otestad logik, saknade edge cases, null/undefined-scenarier, nätverksfel, tomma tillstånd, race conditions. Lista de 3 viktigaste testfallen som MÅSTE finnas. Returnera ENBART JSON: {"status":"GODKÄND"/"AVVISAD","findings":["..."],"severity":"LOW"/"MEDIUM"/"HIGH","suggestions":["..."]}'},
-    {"id":"performance","name":"Prestandagranskare","emoji":"⚡","model":"haiku","enabled":True,
-     "prompt":'Du är prestandaexpert för React/TypeScript/Supabase. Granska för: N+1-queries, saknade index, onödiga re-renders, saknad paginering vid listor, tunga beräkningar i render-loop, stora imports, saknad lazy loading. Returnera ENBART JSON: {"status":"GODKÄND"/"AVVISAD","findings":["..."],"severity":"LOW"/"MEDIUM"/"HIGH","suggestions":["..."]}'},
-    {"id":"mobile-ux","name":"Mobil/Fältanvändare","emoji":"📱","model":"haiku","enabled":True,
-     "prompt":'Du är expert på mobil UX för yrkesanvändare i fält (byggarbetare, hantverkare, tekniker). Granska för: touchmål under 44px, saknad offline-hantering, dålig läsbarhet i solljus, för många steg för vanliga uppgifter, saknad felhantering vid dåligt nätverk, onödiga formulärfält. Tänk: kan en handskebeklädd tumme hantera detta stressigt? Returnera ENBART JSON: {"status":"GODKÄND"/"AVVISAD","findings":["..."],"severity":"LOW"/"MEDIUM"/"HIGH","suggestions":["..."]}'},
+     "prompt":'''Du är Besiktningsmannen — sista grinden innan kod byggs. Du får strukturerade fynd från ALLA granskaragenter.
+
+DITT ANSVAR (och inget annat):
+1. Läs ALLA agenters fynd och bedöm HELHETEN
+2. Är det säkert att bygga nu, eller krävs beslut/förtydliganden?
+3. Formulera konkreta instruktioner till Snickaren om GODKÄND
+4. Formulera en ENKEL fråga till användaren om AVVISAD — bara när det verkligen behövs
+
+GODKÄNN om: Inga HIGH-problem, eller HIGH-problem som Snickaren kan lösa självständigt
+AVVISA om: Spec för vag, säkerhetsrisk som kräver beslut, motstridiga krav
+
+Returnera ENBART JSON:
+{"status":"GODKÄND"/"AVVISAD","findings":["..."],"severity":"LOW"/"MEDIUM"/"HIGH","suggestions":["..."],"snickare_instruktioner":"Konkreta riktlinjer till Snickaren baserat på agenters fynd","user_question":"Fråga till användaren om AVVISAD, annars tom sträng"}
+'''},
 ]
 
 DEFAULT_SETTINGS = {
@@ -536,11 +558,52 @@ Exempel på när du ska använda frågor med alternativ:
 - "Hur komplex?" med alternativ för svårighetsgrad
 
 ━━━ MINNE & KONTEXT ━━━
+Du har FULL FRIHET att:
+- Hämta och analysera information ur minnet
+- Fatta beslut och anta rimliga defaults utan att fråga
+- Komma ihåg tidigare konversation och referera till den
+- Agera som en senior teknisk projektledare med full befogenhet
+- Specificera features baserat på vad du vet om projektet
+Du BEHÖVER INTE fråga om saker du kan rimligt anta. Kör på.
+
 PROJEKTMINNE:
 {memory}
 
 FASÖVERSIKT:
 {phases}"""
+
+# ─── Post-build agenter (kör automatiskt efter varje bygge) ──────────────────
+# Varje agent har ett ENDA ansvar — inga överlapp.
+
+POST_BUILD_AGENTS = [
+    {
+        "id": "felsokaren",
+        "name": "Felsökaren",
+        "emoji": "🔬",
+        "model": "ollama:qwen2.5-coder:7b",
+        "stage": "post",
+        "prompt": """Du ansvarar ENBART för att hitta buggar i genererad kod: syntaxfel, saknade imports, odefinierade variabler, trasiga JSX-taggar, felaktig indragning, logikfel som garanterat kraschar runtime. Rapportera INTE kodstil eller förbättringsförslag.
+Returnera ENBART JSON: {"status":"GODKÄND"/"AVVISAD","findings":["..."],"severity":"LOW"/"MEDIUM"/"HIGH","suggestions":["..."]}"""
+    },
+    {
+        "id": "refaktorering",
+        "name": "Refaktorerare",
+        "emoji": "♻️",
+        "model": "ollama:qwen2.5-coder:7b",
+        "stage": "post",
+        "prompt": """Du ansvarar ENBART för refaktoreringsförslag på genererad kod: duplicerad kod som bör extraheras, funktioner som är för långa (>30 rader), magiska värden som bör bli konstanter, dåliga variabelnamn, onödig komplexitet. Hitta INTE buggar — det gör Felsökaren.
+Returnera ENBART JSON: {"status":"GODKÄND"/"AVVISAD","findings":["..."],"severity":"LOW"/"MEDIUM"/"HIGH","suggestions":["..."]}"""
+    },
+    {
+        "id": "integration",
+        "name": "Integrationstestaren",
+        "emoji": "🔗",
+        "model": "ollama:qwen2.5-coder:7b",
+        "stage": "post",
+        "prompt": """Du ansvarar ENBART för att kontrollera att ny kod inte bryter befintliga gränssnitt: ändrade API-signaturer, borttagna exports, inkompatibla props/typer, saknade databas-migreringar, brutna imports från andra moduler. Rapportera INTE kodkvalitet eller buggar.
+Returnera ENBART JSON: {"status":"GODKÄND"/"AVVISAD","findings":["..."],"severity":"LOW"/"MEDIUM"/"HIGH","suggestions":["..."]}"""
+    },
+]
 
 def parse_fraga(reply: str) -> dict | None:
     """Parsar [FRÅGA]...[/FRÅGA] block och returnerar strukturerad fråga."""
@@ -597,15 +660,16 @@ def _ollama_available() -> bool:
         return True
     except: return False
 
-def run_agent_ollama(agent_def: dict, spec: str, memory: str, feedback: str = "") -> dict:
+def run_agent_ollama(agent_def: dict, spec: str, memory: str, feedback: str = "", code_context: str = "") -> dict:
     """Kor agent via lokal Ollama — gratis och snabbt pa RTX 3080."""
     import urllib.request as _ur
     model_key = agent_def.get("model", "sonnet")
     ollama_model = model_key.split("ollama:", 1)[1] if "ollama:" in model_key else "qwen2.5-coder:7b"
     fb = f"\n\nFEEDBACK:\n{feedback}" if feedback else ""
+    code_block = f"\n\nKODBAS (aktuell):\n{code_context[:8000]}" if code_context else ""
     messages = [
         {"role": "system", "content": agent_def["prompt"]},
-        {"role": "user", "content": f"MINNE:\n{memory}\n\nSPEC:\n{spec}{fb}\n\nReturnera ENBART JSON."}
+        {"role": "user", "content": f"MINNE:\n{memory}\n\nSPEC:\n{spec}{code_block}{fb}\n\nReturnera ENBART JSON."}
     ]
     payload = json.dumps({"model": ollama_model, "messages": messages,
                            "stream": False, "format": "json"}).encode("utf-8")
@@ -626,27 +690,26 @@ def run_agent_ollama(agent_def: dict, spec: str, memory: str, feedback: str = ""
                 "status": "GODKÄND", "findings": [f"Ollama-fel: {ex}"],
                 "severity": "LOW", "suggestions": [], "_local": True}
 
-def run_agent(agent_def: dict, spec: str, memory: str, feedback: str = "", s: dict = None) -> dict:
+def run_agent(agent_def: dict, spec: str, memory: str, feedback: str = "", s: dict = None, code_context: str = "") -> dict:
     if s is None: s = load_settings()
     model_key = agent_def.get("model","sonnet")
-    # Ruta till Ollama om modellen borjar med "ollama:"
     if model_key.startswith("ollama:"):
-        result = run_agent_ollama(agent_def, spec, memory, feedback)
-        # Fallback till haiku om Ollama inte svarade korrekt
+        result = run_agent_ollama(agent_def, spec, memory, feedback, code_context=code_context)
         ollama_err = result.get("findings", [""])
         if ollama_err and str(ollama_err[0]).startswith("Ollama-fel"):
             fallback = dict(agent_def); fallback["model"] = "haiku"
-            return run_agent(fallback, spec, memory, feedback, s)
+            return run_agent(fallback, spec, memory, feedback, s, code_context)
         return result
     client_inst = get_client(s)
     if not client_inst:
         return {"agent":agent_def["name"],"id":agent_def["id"],"status":"GODKÄND","findings":["Demo-läge"],"severity":"LOW","suggestions":[]}
     model_name = model_for(model_key, s)
     fb = f"\n\nFEEDBACK:\n{feedback}" if feedback else ""
+    code_block = f"\n\nKODBAS (aktuell):\n{code_context[:8000]}" if code_context else ""
     try:
-        r = client_inst.messages.create(model=model_name, max_tokens=700,
+        r = client_inst.messages.create(model=model_name, max_tokens=900,
             system=agent_def["prompt"],
-            messages=[{"role":"user","content":f"MINNE:\n{memory}\n\nSPEC:\n{spec}{fb}\n\nReturnera ENBART JSON."}])
+            messages=[{"role":"user","content":f"MINNE:\n{memory}\n\nSPEC:\n{spec}{code_block}{fb}\n\nReturnera ENBART JSON."}])
         text = r.content[0].text.strip(); si, e = text.find("{"), text.rfind("}")+1
         data = json.loads(text[si:e]) if si != -1 else {}
         data["agent"]=agent_def["name"]; data["id"]=agent_def["id"]; return data
@@ -833,6 +896,28 @@ async def update_project_settings(project_id: str, payload: dict):
 async def get_features():
     proj=get_active_project(); return JSONResponse(load_features(proj["id"]) if proj else [])
 
+@app.delete("/api/features/{feature_name:path}")
+async def delete_feature(feature_name: str):
+    proj = get_active_project()
+    if not proj:
+        return JSONResponse({"ok": False, "error": "Inget aktivt projekt"}, status_code=400)
+    pid = proj["id"]
+    # Ta bort från features.json
+    features = load_features(pid)
+    before = len(features)
+    features = [f for f in features if f["name"] != feature_name]
+    save_features(pid, features)
+    # Rensa väntande bygge om det gäller denna feature
+    pending = load_pending(pid)
+    if pending and pending.get("feature") == feature_name:
+        pending_path = project_dir(pid) / "pending.json"
+        if pending_path.exists():
+            pending_path.unlink()
+    # Uppdatera FEATURES.md
+    update_features_md(pid)
+    removed = before - len(features)
+    return JSONResponse({"ok": True, "removed": removed})
+
 # Chat
 @app.post("/api/chat")
 async def chat(payload: dict):
@@ -843,9 +928,13 @@ async def chat(payload: dict):
     client_inst = get_client(s)
     if not client_inst: return JSONResponse({"reply":"⚠️ API-nyckel saknas. Gå till Inställningar (⚙️) och lägg till din Anthropic API-nyckel.","feature_detected":None,"feature_spec":None})
     memory=load_memory(proj["id"]); phases=phases_summary(proj["id"])
+    # Ge Projektledaren tillgång till aktuell kodbas
+    rd_chat = effective_repo_dir(proj["id"])
+    code_ctx_chat = read_codebase_context(rd_chat, {"name": message, "problem": message, "solution": ""}) if rd_chat.exists() else ""
+    code_section = f"\n\nAKTUELL KODBAS:\n{code_ctx_chat[:6000]}" if code_ctx_chat else ""
     system=PROJEKTLEDARE_PROMPT.format(project_name=proj["name"],project_desc=proj.get("description",""),
-        project_github=proj.get("github","Ej angivet"),memory=memory,phases=phases)
-    response=client_inst.messages.create(model=model_for("projektledare",s),max_tokens=1200,system=system,
+        project_github=proj.get("github","Ej angivet"),memory=memory,phases=phases) + code_section
+    response=client_inst.messages.create(model=model_for("projektledare",s),max_tokens=1500,system=system,
         messages=history[-12:]+[{"role":"user","content":message}])
     reply=response.content[0].text
     feature_spec=parse_feature_klar(reply); feature_name=None
@@ -864,49 +953,118 @@ async def chat(payload: dict):
 # Review
 @app.post("/api/review")
 async def review_feature(payload: dict):
-    feature_name=payload.get("feature_name","Okänd"); spec_obj=payload.get("spec_obj",{})
-    proj=get_active_project()
-    if not proj: return JSONResponse({"approved":False})
+    feature_name = payload.get("feature_name", "Okand")
+    spec_obj = payload.get("spec_obj", {})
+    proj = get_active_project()
+    if not proj:
+        return JSONResponse({"approved": False})
     s = load_settings()
     max_iter = int(s.get("max_iterations", 3))
-    memory=load_memory(proj["id"]); spec_str=json.dumps(spec_obj,ensure_ascii=False) if spec_obj else feature_name
-    feedback=""; all_approved=False
+    memory = load_memory(proj["id"])
+    spec_str = json.dumps(spec_obj, ensure_ascii=False) if spec_obj else feature_name
+    loop = asyncio.get_event_loop()
     agents, inspector = get_agents_from_settings(s)
-    await manager.broadcast({"type":"pipeline_start","feature":feature_name,
-                             "agents":[{"id":a["id"],"name":f"{a.get('emoji','')}{a['name']}","model":a.get('model','haiku')} for a in agents+[inspector]]})
-    for iteration in range(1, max_iter+1):
-        await manager.broadcast({"type":"iteration","iteration":iteration,"max":max_iter})
+    all_approved = False
+    snickare_instruktioner = ""
+
+    await manager.broadcast({"type": "pipeline_start", "feature": feature_name,
+        "agents": [{"id": a["id"], "name": f"{a.get('emoji','')}{a['name']}", "model": a.get("model","haiku")}
+                   for a in agents + [inspector]]})
+
+    for iteration in range(1, max_iter + 1):
+        await manager.broadcast({"type": "iteration", "iteration": iteration, "max": max_iter})
         for agent in agents:
-            await manager.broadcast({"type":"agent_status","id":agent["id"],"name":f"{agent.get('emoji','')}{agent['name']}","status":"running"})
-        loop=asyncio.get_event_loop(); results=[]
-        with ThreadPoolExecutor(max_workers=max(len(agents),1)) as ex:
-            futures={ex.submit(run_agent, agent, spec_str, memory, feedback, s):agent for agent in agents}
-            for future in futures:
-                result=await loop.run_in_executor(None, future.result); results.append(result)
-                await manager.broadcast({"type":"agent_status","id":result["id"],
-                    "name":result.get("agent","Agent"),
-                    "status":"approved" if result.get("status")=="GODKÄND" else "rejected",
-                    "findings":result.get("findings",[]),"severity":result.get("severity","LOW"),
-                    "suggestions":result.get("suggestions",[]),"local":result.get("_local",False)})
-        await manager.broadcast({"type":"agent_status","id":inspector["id"],"name":f"{inspector.get('emoji','')}{inspector['name']}","status":"running"})
-        fb_sum="\n".join(f"{r.get('agent','?')}: {r.get('status','?')} — "+"; ".join(r.get("findings",[])) for r in results)
-        insp=await loop.run_in_executor(None, run_agent, inspector, fb_sum, memory, "", s)
-        await manager.broadcast({"type":"agent_status","id":inspector["id"],
-            "name":f"{inspector.get('emoji','')}{inspector['name']}",
-            "status":"approved" if insp.get("status")=="GODKÄND" else "rejected",
-            "findings":insp.get("findings",[]),"severity":insp.get("severity","LOW")})
-        rejected=[r for r in results if r.get("status")=="AVVISAD"]
-        if not rejected and insp.get("status")=="GODKÄND":
-            all_approved=True
-            features=load_features(proj["id"])
+            await manager.broadcast({"type": "agent_status", "id": agent["id"],
+                "name": f"{agent.get('emoji','')}{agent['name']}", "status": "running"})
+
+        # Kör alla granskare parallellt — broadcast direkt när varje agent är klar
+        results = []
+        prev_ctx = f"TIDIGARE BYGGINSIKTER:\n{snickare_instruktioner}" if snickare_instruktioner else ""
+        rd = effective_repo_dir(proj["id"])
+        code_ctx = read_codebase_context(rd, spec_obj) if rd.exists() else ""
+
+        from concurrent.futures import as_completed as _as_completed
+        ex = ThreadPoolExecutor(max_workers=min(len(agents), 10))
+        future_to_agent = {ex.submit(run_agent, ag, spec_str, memory, prev_ctx, s, code_ctx): ag
+                           for ag in agents}
+        try:
+            # as_completed levererar futures i den ordning de FAKTISKT blir klara
+            pending = set(future_to_agent.keys())
+            while pending:
+                done_future = await loop.run_in_executor(None,
+                    lambda fs=list(pending): next(_as_completed(fs)))
+                pending.discard(done_future)
+                ag = future_to_agent[done_future]
+                try:
+                    result = done_future.result()
+                except Exception as e:
+                    result = {"id": ag["id"], "agent": ag["name"], "status": "GODKAND",
+                              "findings": [f"Agent-fel: {e}"], "severity": "LOW", "suggestions": []}
+                results.append(result)
+                await manager.broadcast({"type": "agent_status",
+                    "id": result.get("id"), "name": result.get("agent", "Agent"),
+                    "status": "approved" if result.get("status") in ("GODKAND","GODKÄND") else "rejected",
+                    "findings": result.get("findings", []),
+                    "severity": result.get("severity", "LOW"),
+                    "suggestions": result.get("suggestions", []),
+                    "local": result.get("_local", False)})
+        finally:
+            ex.shutdown(wait=False)
+
+        # Bygg detaljerad rapport till Inspector (agent-till-agent kommunikation)
+        parts = []
+        for r in results:
+            sev = r.get("severity", "LOW")
+            st = r.get("status", "GODKAND")
+            finds = "; ".join(r.get("findings", [])) or "Inga anmarkningar"
+            suggs = "; ".join(r.get("suggestions", [])) or "-"
+            parts.append(f"### {r.get('agent','?')} [{st}] [{sev}]\nFynd: {finds}\nForslag: {suggs}")
+        inspector_input = (
+            f"FEATURE: {feature_name}\n\nSPEC:\n{spec_str[:2000]}\n\n"
+            f"AGENT-FYND (iteration {iteration}/{max_iter}):\n" + "\n\n".join(parts)
+        )
+
+        await manager.broadcast({"type": "agent_status",
+            "id": inspector["id"],
+            "name": f"{inspector.get('emoji','')}{inspector['name']}",
+            "status": "running"})
+        insp = await loop.run_in_executor(None, run_agent, inspector, inspector_input, memory, "", s, code_ctx)
+        insp_status = insp.get("status", "GODKAND")
+        snickare_instruktioner = insp.get("snickare_instruktioner", "")
+        user_question = insp.get("user_question", "")
+
+        await manager.broadcast({"type": "agent_status",
+            "id": inspector["id"],
+            "name": f"{inspector.get('emoji','')}{inspector['name']}",
+            "status": "approved" if insp_status in ("GODKAND","GODKÄND") else "rejected",
+            "findings": insp.get("findings", []),
+            "severity": insp.get("severity", "LOW"),
+            "suggestions": insp.get("suggestions", []),
+            "inspector_note": snickare_instruktioner})
+
+        if insp_status in ("GODKAND", "GODKÄND"):
+            all_approved = True
+            features = load_features(proj["id"])
             for f in features:
-                if f["name"]==feature_name: f["status"]="Granskas"
-            save_features(proj["id"],features)
-            await manager.broadcast({"type":"pipeline_done","success":True,"feature":feature_name}); break
-        feedback=fb_sum
-        if iteration==max_iter:
-            await manager.broadcast({"type":"pipeline_done","success":False,"feature":feature_name})
-    return JSONResponse({"approved":all_approved})
+                if f["name"] == feature_name:
+                    f["status"] = "Granskas"
+            save_features(proj["id"], features)
+            await manager.broadcast({"type": "pipeline_done", "success": True,
+                "feature": feature_name, "snickare_instruktioner": snickare_instruktioner})
+            break
+
+        # Avbryt och fraga anvandaren bara om Inspector explicit vill det
+        if user_question and iteration >= 2:
+            await manager.broadcast({"type": "pipeline_done", "success": False,
+                "feature": feature_name, "user_question": user_question,
+                "reason": "; ".join(insp.get("findings", []))})
+            return JSONResponse({"approved": False, "user_question": user_question})
+
+        if iteration == max_iter:
+            await manager.broadcast({"type": "pipeline_done", "success": False,
+                "feature": feature_name, "reason": "; ".join(insp.get("findings", []))})
+
+    return JSONResponse({"approved": all_approved, "snickare_instruktioner": snickare_instruktioner})
 
 # Build
 @app.post("/api/build")
@@ -1823,18 +1981,96 @@ async def start_file_watcher():
                 pass
     asyncio.create_task(_watch())
 
+
+# ─── Post-build pipeline — 3 agenter parallellt ───────────────────────────────
+
+@app.post("/api/debug-scan")  # bakåtkompatibelt alias
+@app.post("/api/post-build-check")
+async def post_build_check(payload: dict):
+    """Kör alla 3 post-build-agenter parallellt på pendande filer."""
+    feature_name = payload.get("feature_name", "Okänd")
+    proj = get_active_project()
+    if not proj:
+        return JSONResponse({"ok": False, "error": "Inget projekt"})
+    pid = proj["id"]
+    s = load_settings()
+    pending = load_pending(pid)
+    if not pending:
+        return JSONResponse({"ok": True, "all_approved": True, "results": [], "needs_fix": False})
+
+    files = pending.get("files", [])
+    kod_kontext = "\n\n".join(
+        f"=== {fc['path']} ({fc.get('action','create')}) ===\n{fc.get('content','')[:2500]}"
+        for fc in files
+    )
+
+    await manager.broadcast({"type": "post_build_start", "feature": feature_name,
+        "agents": [{"id": a["id"], "name": f"{a['emoji']} {a['name']}", "stage": "post"} for a in POST_BUILD_AGENTS]})
+
+    loop = asyncio.get_event_loop()
+    results = []
+
+    def run_post_agent(agent):
+        spec = f"Genererad kod att granska:\n\n{kod_kontext}"
+        r = run_agent(agent, spec, "", "", s)
+        return r
+
+    with ThreadPoolExecutor(max_workers=3) as ex:
+        futures = {ex.submit(run_post_agent, agent): agent for agent in POST_BUILD_AGENTS}
+        for future in futures:
+            agent = futures[future]
+            try:
+                result = future.result(timeout=120)
+            except Exception as e:
+                result = {"id": agent["id"], "agent": agent["name"], "status": "GODKÄND",
+                          "findings": [f"Post-agent fel: {e}"], "severity": "LOW", "suggestions": []}
+            results.append(result)
+            await manager.broadcast({"type": "post_agent_done",
+                "id": result.get("id"), "name": result.get("agent","?"),
+                "status": "approved" if result.get("status") in ("GODKÄND","GODKAND") else "rejected",
+                "findings": result.get("findings", []),
+                "severity": result.get("severity", "LOW"),
+                "suggestions": result.get("suggestions", [])})
+
+    needs_fix = any(r.get("status") not in ("GODKÄND","GODKAND") and r.get("severity") in ("HIGH","MEDIUM")
+                    for r in results)
+    all_approved = not needs_fix
+    await manager.broadcast({"type": "post_build_done",
+        "feature": feature_name,
+        "all_approved": all_approved,
+        "needs_fix": needs_fix,
+        "results": results})
+    return JSONResponse({"ok": True, "all_approved": all_approved, "results": results, "needs_fix": needs_fix})
+
+
+# ─── Startup: hot-reload file watcher ─────────────────────────────────────────
+
+@app.on_event("startup")
+async def start_file_watcher():
+    import asyncio, os
+    async def _watch():
+        html_path = Path("index.html")
+        last_mtime = html_path.stat().st_mtime if html_path.exists() else 0
+        while True:
+            await asyncio.sleep(1)
+            try:
+                mtime = html_path.stat().st_mtime
+                if mtime != last_mtime:
+                    last_mtime = mtime
+                    await manager.broadcast({"type": "hot_reload", "file": "index.html"})
+            except Exception:
+                pass
+    asyncio.create_task(_watch())
+
+
 if __name__=="__main__":
     import uvicorn
     s = load_settings()
-    has_key = "OK" if s.get("api_key") else "SAKNAS - oppna http://localhost:8000 och ga till Installningar"
-    has_gh  = "OK" if s.get("github_token") else "Saknas (behovs for Snickaren)"
-    print(f"\n{'='*55}\n  Ishoo Creator v6 - Spec-driven Edition\n  Oppna: http://localhost:8000\n{'='*55}")
-    print(f"  API-nyckel:      {has_key}")
-    print(f"  GitHub token:    {has_gh}")
-    print(f"  Dev-branch:      {s.get('dev_branch','dev')}")
-    print(f"  Prod-branch:     {s.get('prod_branch','main')}")
-    print(f"  Max iterationer: {s.get('max_iterations',3)}")
-    print(f"  Agenter:         {len(s.get('agents', DEFAULT_AGENTS))}")
+    has_key = "OK" if s.get("api_key") else "SAKNAS"
+    has_gh  = "OK" if s.get("github_token") else "Saknas"
+    print(f"\n{'='*55}\n  Ishoo Creator\n  Oppna: http://localhost:8000\n{'='*55}")
+    print(f"  API-nyckel:   {has_key}")
+    print(f"  GitHub token: {has_gh}")
+    print(f"  Agenter:      {len(s.get('agents', DEFAULT_AGENTS))}")
     print(f"{'='*55}\n")
     uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=True)
-

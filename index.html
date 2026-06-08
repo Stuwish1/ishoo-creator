@@ -68,6 +68,14 @@ header h1{font-size:14px;font-weight:700;margin-right:4px;}
 .f-name{flex:1;color:var(--text);line-height:1.3;}
 .f-phase{font-size:9px;padding:1px 4px;border-radius:3px;font-weight:700;background:rgba(99,102,241,.2);color:var(--accent);}
 .f-badge{font-size:10px;padding:1px 6px;border-radius:99px;font-weight:600;white-space:nowrap;}
+.f-item-clickable{cursor:pointer;transition:background .15s}
+.f-item-clickable:hover{background:var(--hover)}
+.f-actions{display:flex;gap:3px;opacity:0;transition:opacity .15s;align-items:center}
+.f-item-clickable:hover .f-actions{opacity:1}
+.f-act-btn{background:none;border:1px solid var(--border);border-radius:4px;padding:2px 5px;font-size:11px;cursor:pointer;color:var(--text);line-height:1}
+.f-act-btn:hover{background:var(--border)}
+.f-del{color:#e55;border-color:#e55}
+.f-del:hover{background:#fee}
 .fb-planerad{background:rgba(107,114,128,.2);color:var(--muted);}
 .fb-granskas{background:rgba(234,179,8,.15);color:var(--yellow);}
 .fb-klar{background:rgba(34,197,94,.15);color:var(--green);}
@@ -335,14 +343,7 @@ header h1{font-size:14px;font-weight:700;margin-right:4px;}
     <div class="avatar">👷</div>
     <div><h2>Projektledaren</h2><p id="activeLabel">Välj eller skapa ett projekt</p></div>
   </div>
-  <div class="messages" id="messages">
-    <div class="msg assistant">
-      <div class="msg-bubble">Välkommen till <strong>Ishoo Creator!</strong><br><br>
-      Skapa ett projekt med <strong>+</strong> och berätta vad du vill bygga.<br><br>
-      💡 <em>Tips: Du kan också säga "Lägg till en agent som kollar X" eller "Ändra max iterationer" — jag hjälper dig konfigurera systemet också.</em></div>
-      <div class="msg-time">Nu</div>
-    </div>
-  </div>
+  <div class="messages" id="messages"></div>
 
   <!-- SUGGESTIONS BAR (visas efter [FEATURE_KLAR]) -->
   <div class="suggestions-bar" id="suggestionsBar" style="display:none;">
@@ -713,6 +714,7 @@ let currentDiffs=[],agentsDone=0,phaseFilter='all',currentEnv='dev',appState='id
 let onboardingProjectId=null,onboardingHistory=[];
 let pendingSysConfig=null,currentAgents=[];
 let attachedImages=[];
+let isAiBusy=false; // blockerar dubbelsändning
 
 // ─── INIT ─────────────────────────────────────────────────────────────────────
 
@@ -823,11 +825,13 @@ function handleWS(msg){
   else if(msg.type==='build_start') setProgress(5,`Snickaren bygger...`);
   else if(msg.type==='build_progress') setProgress(40,msg.message);
   else if(msg.type==='build_done'){
-    setProgress(80,'Diff klar — väntar på din granskning');
+    setProgress(80,'Diff klar — kör Felsökaren...');
     currentDiffs=msg.diffs||[];
-    addMsg('assistant',`🔨 **${currentDiffs.length}** fil(er) påverkas. Granska diffs nedan.`);
+    addMsg('assistant',`🔨 **${currentDiffs.length}** fil(er) påverkas — Felsökaren granskar automatiskt...`);
     showDiffModal(msg.feature,msg.diffs,msg.summary);
     showActionBar('built',msg.feature);
+    // Auto-trigga Felsökaren
+    setTimeout(()=>runDebugScan(msg.feature), 800);
   }
   else if(msg.type==='build_error'){setProgress(0,'❌ Byggfel');addMsg('assistant',`❌ ${msg.message}`);hideActionBar();}
   else if(msg.type==='push_start') setProgress(90,`Pushar till ${msg.env||currentEnv}...`);
@@ -917,16 +921,24 @@ async function checkOllamaStatus(){
   }catch{}
 }
 async function loadAll(){
-  try{const r=await fetch(`${API}/api/projects`);const d=await r.json();renderProjects(d);
+  try{
+    const r=await fetch(`${API}/api/projects`);const d=await r.json();
+    // Sätt projekt-id DIREKT — innan något annat körs
+    const prevId=window._activeProjectId;
+    window._activeProjectId=d.active||'default';
+    renderProjects(d);
     const a=d.projects.find(p=>p.id===d.active);
     if(a) document.getElementById('activeLabel').textContent=a.name+(a.description?` — ${a.description}`:'');
-  }catch{}
-  loadFeatures(); loadQueue(); checkOllamaStatus(); setTimeout(loadHealth,1500);
-  // Hämta aktivt projekt-id och återställ chatthistorik
-  fetch(`${API}/api/projects`).then(r=>r.json()).then(d=>{
-    window._activeProjectId=d.active||'default';
+    // Återställ historik om projekt byttes eller första laddning
+    if(prevId!==window._activeProjectId){
+      document.getElementById('messages').innerHTML='';
+      chatHistory=[];
+      restoreChatHistory();
+    }
+  }catch{
     restoreChatHistory();
-  }).catch(()=>restoreChatHistory());
+  }
+  loadFeatures(); loadQueue(); checkOllamaStatus(); setTimeout(loadHealth,1500);
 }
 
 function renderProjects(data){
@@ -959,12 +971,78 @@ async function loadFeatures(){
   try{const r=await fetch(`${API}/api/features`);const data=await r.json();
     const filtered=phaseFilter==='all'?data:data.filter(f=>f.phase===phaseFilter);
     document.getElementById('featureList').innerHTML=filtered.length?filtered.map(f=>`
-      <div class="f-item">
-        <div style="flex:1;min-width:0;"><div class="f-name">${f.name}</div><span class="f-phase">${f.phase||'MVP'}</span></div>
-        <span class="f-badge fb-${(f.status||'planerad').toLowerCase().replace(' ','-')}">${f.status}</span>
+      <div class="f-item f-item-clickable" onclick="selectFeatureAction('${f.name.replace(/'/g,"\\'")}','${f.status||'Planerad'}')">
+        <div style="flex:1;min-width:0;">
+          <div class="f-name">${f.name}</div>
+          <span class="f-phase">${f.phase||'MVP'}</span>
+        </div>
+        <span class="f-badge fb-${(f.status||'planerad').toLowerCase().replace(/\s/g,'-')}">${f.status||'Planerad'}</span>
+        <div class="f-actions" onclick="event.stopPropagation()">
+          <button class="f-act-btn" title="Granska" onclick="triggerReview('${f.name.replace(/'/g,"\\'")}')">🔍</button>
+          <button class="f-act-btn" title="Bygg" onclick="triggerBuild('${f.name.replace(/'/g,"\\'")}')">🔨</button>
+          <button class="f-act-btn f-del" title="Ta bort" onclick="deleteFeature('${f.name.replace(/'/g,"\\'")}')">×</button>
+        </div>
       </div>`).join(''):'<div style="padding:10px 12px;font-size:12px;color:var(--muted)">Inga features ännu.</div>';
     renderPhaseProgress(data);
   }catch{}
+}
+
+function selectFeatureAction(name, status){
+  // Klick på feature — starta arbete med den
+  document.getElementById('chatInput').value = `Fortsätt med "${name}"`;
+  document.getElementById('chatInput').focus();
+  addMsg('assistant',`Vald feature: <strong>${name}</strong> (${status}). Vad vill du göra med den?`);
+  // Visa snabbknappar
+  showOptions({
+    question: `Vad vill du göra med "${name}"?`,
+    multi: false,
+    options: ['Granska med agenter', 'Bygg kod direkt', 'Ändra spec', 'Ta bort feature']
+  });
+}
+
+async function triggerReview(featureName){
+  // Hämta spec för denna feature och starta review
+  try{
+    const r = await fetch(`${API}/api/features`);
+    const features = await r.json();
+    const feature = features.find(f=>f.name===featureName);
+    if(!feature){addMsg('assistant',`Hittade inte feature: ${featureName}`);return;}
+    currentFeature = featureName;
+    currentSpecObj = feature;
+    addMsg('assistant',`🔍 Startar granskning av <strong>${featureName}</strong>...`);
+    setProgress(5,'Startar agent-pipeline...');
+    await fetch(`${API}/api/review`,{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({feature_name:featureName,spec_obj:feature})});
+  }catch(e){addMsg('assistant',`Fel vid granskning: ${e}`);}
+}
+
+async function triggerBuild(featureName){
+  try{
+    const r = await fetch(`${API}/api/features`);
+    const features = await r.json();
+    const feature = features.find(f=>f.name===featureName);
+    if(!feature){addMsg('assistant',`Hittade inte feature: ${featureName}`);return;}
+    currentFeature = featureName;
+    currentSpecObj = feature;
+    addMsg('assistant',`🔨 Bygger <strong>${featureName}</strong>...`);
+    setProgress(10,'Startar byggprocessen...');
+    await fetch(`${API}/api/build`,{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({feature_name:featureName,spec_obj:feature})});
+  }catch(e){addMsg('assistant',`Fel vid bygge: ${e}`);}
+}
+
+async function deleteFeature(featureName){
+  if(!confirm(`Ta bort "${featureName}" och all byggd kod för den?`))return;
+  try{
+    const r=await fetch(`${API}/api/features/${encodeURIComponent(featureName)}`,{method:'DELETE'});
+    const d=await r.json();
+    if(d.ok){
+      loadFeatures();
+      addMsg('assistant',`🗑️ Feature <strong>${featureName}</strong> borttagen — inklusive eventuell byggd kod.`);
+    } else {
+      addMsg('assistant',`Fel vid borttagning: ${d.error||'okänt fel'}`);
+    }
+  }catch(e){addMsg('assistant',`Fel: ${e}`);}
 }
 
 function renderPhaseProgress(features){
@@ -1064,9 +1142,21 @@ async function sendMessage(){
   const inp=document.getElementById('chatInput');const text=inp.value.trim();
   const hasImgs=attachedImages.length>0;
   if(!text&&!hasImgs)return;
+  // Blockera om AI jobbar — visa tydligt meddelande
+  if(isAiBusy){
+    const btn=document.getElementById('sendBtn');
+    const orig=btn.innerHTML;
+    btn.textContent='⏳ AI jobbar...';
+    btn.style.background='#f59e0b';
+    setTimeout(()=>{btn.innerHTML=orig;btn.style.background='';},2000);
+    return;
+  }
   const imgs=[...attachedImages];
   clearChatInput();
-  document.getElementById('sendBtn').disabled=true;
+  isAiBusy=true;
+  const sendBtn=document.getElementById('sendBtn');
+  sendBtn.disabled=true;
+  sendBtn.title='AI jobbar — vänta...';
   // Visa user-meddelande med bilder
   let userHtml=text?`<div>${text.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</div>`:'';
   if(imgs.length) userHtml+=imgs.map(i=>`<img src="${i.dataUrl}" style="max-width:180px;border-radius:8px;margin-top:4px;display:block;">`).join('');
@@ -1121,7 +1211,9 @@ async function sendMessage(){
       if(d.system_config){ showSysCfg(d.system_config); }
     }
   }catch(e){removeTyping(tid);addMsg('assistant','⚠️ Kunde inte nå servern. Kör app.py?');}
-  document.getElementById('sendBtn').disabled=false;
+  isAiBusy=false;
+  const sb=document.getElementById('sendBtn');
+  sb.disabled=false;sb.title='Skicka (Enter)';
 }
 
 // ─── ACTION BAR ───────────────────────────────────────────────────────────────
@@ -1719,11 +1811,18 @@ function restoreChatHistory(){
   try{
     const proj=window._activeProjectId||'default';
     const hist=JSON.parse(localStorage.getItem('chat_'+proj)||'[]');
-    if(!hist.length)return;
     const msgs=document.getElementById('messages');
+    if(!hist.length){
+      // Visa välkomstmeddelande om ingen historik finns
+      const now=new Date().toLocaleTimeString('sv-SE',{hour:'2-digit',minute:'2-digit'});
+      const div=document.createElement('div');div.className='msg assistant';
+      div.innerHTML=`<div class="msg-bubble">Välkommen till <strong>Ishoo Creator!</strong><br><br>Skapa ett projekt med <strong>+</strong> och berätta vad du vill bygga.<br><br>💡 <em>Tips: Du kan också säga "Lägg till en agent som kollar X" eller "Ändra max iterationer" — jag hjälper dig konfigurera systemet också.</em></div><div class="msg-time">${now}</div>`;
+      msgs.appendChild(div);
+      return;
+    }
     hist.forEach(m=>{
       const div=document.createElement('div');div.className=`msg ${m.role}`;
-      div.innerHTML=`<div class="msg-bubble">${m.html}</div><div class="msg-time">${m.time}</div>`;
+      div.innerHTML=`<div class="msg-bubble">${m.html}</div><div class="msg-time">${m.time||''}</div>`;
       msgs.appendChild(div);
     });
     msgs.scrollTop=msgs.scrollHeight;
