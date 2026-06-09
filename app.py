@@ -93,7 +93,7 @@ Returnera ENBART JSON: {"status":"GODKÄND"/"AVVISAD","findings":["..."],"severi
      "prompt":'Du ansvarar ENBART för säkerhet. Granska: SQL-injection, XSS, exponerade API-nycklar, saknad RLS i Supabase, felaktig autentisering/auktorisering, CSRF, osäker direktlänkning till resurser. Kommentera inget annat. Returnera ENBART JSON: {"status":"GODKÄND"/"AVVISAD","findings":["..."],"severity":"LOW"/"MEDIUM"/"HIGH","suggestions":["..."]}'},
 
     # ── Databas ──────────────────────────────────────────────────────────────────
-    {"id":"dba","name":"DBA","emoji":"🗄️","model":"ollama:qwen2.5-coder:7b","enabled":True,
+    {"id":"dba","name":"DBA","emoji":"🗄️","model":"haiku","enabled":True,
      "prompt":'''Du ansvarar ENBART för databasfrågor.
 STEG 1: Kräver denna feature persistent datalagring?
 STEG 2a — JA + ingen DB: AVVISAD HIGH, beskriv exakt vilka tabeller/kolumner som behövs.
@@ -110,7 +110,7 @@ Returnera ENBART JSON: {"status":"GODKÄND"/"AVVISAD","findings":["..."],"severi
      "prompt":'Du ansvarar ENBART för Single Responsibility. Granska: har varje funktion/komponent ett enda ansvar? God Objects? Otydliga gränssnitt mellan lager? Saknade abstraktioner? Returnera ENBART JSON: {"status":"GODKÄND"/"AVVISAD","findings":["..."],"severity":"LOW"/"MEDIUM"/"HIGH","suggestions":["..."]}'},
 
     # ── TypeScript-typer ─────────────────────────────────────────────────────────
-    {"id":"typgranskare","name":"Typgranskaren","emoji":"🔷","model":"ollama:qwen2.5-coder:7b","enabled":True,
+    {"id":"typgranskare","name":"Typgranskaren","emoji":"🔷","model":"haiku","enabled":True,
      "prompt":'''Du ansvarar ENBART för TypeScript-typsäkerhet.
 Granska: användning av `any` (förbjudet utom med explicit motivering), saknade interface/type-definitioner, inkonsekventa typer mot befintlig src/types/, icke-exporterade typer som borde vara delade, implicit `any` från bibliotek utan types, union types som borde vara enums.
 GODKÄND om: inga `any`, alla nya typer definierade och exporterade korrekt.
@@ -118,7 +118,7 @@ AVVISAD om: `any` används, typer saknas, eller typer är inkompatibla med befin
 Returnera ENBART JSON: {"status":"GODKÄND"/"AVVISAD","findings":["..."],"severity":"LOW"/"MEDIUM"/"HIGH","suggestions":["..."]}'''},
 
     # ── Felhantering ─────────────────────────────────────────────────────────────
-    {"id":"felhantering","name":"Felhanteringsgranskaren","emoji":"🚨","model":"ollama:qwen2.5-coder:7b","enabled":True,
+    {"id":"felhantering","name":"Felhanteringsgranskaren","emoji":"🚨","model":"haiku","enabled":True,
      "prompt":'''Du ansvarar ENBART för felhantering och robusthet.
 Granska:
 - Saknar API-anrop try/catch?
@@ -2931,8 +2931,10 @@ async def consult_feature(payload: dict):
     code_ctx = read_codebase_context(rd, spec_obj, for_ollama=False) if rd.exists() else ""
     loop = asyncio.get_event_loop()
 
+    _BLOCKER_IDS = {"security", "dba", "felhantering", "typgranskare", "beroendeanalytiker"}
     await manager.broadcast({"type": "consult_start", "feature": feature_name,
-        "agents": [{"id": a["id"], "name": f"{a.get('emoji','')}{a['name']}"} for a in agents]})
+        "agents": [{"id": a["id"], "name": f"{a.get('emoji','')}{a['name']}",
+                    "phase": 2, "is_blocker": a["id"] in _BLOCKER_IDS} for a in agents]})
 
     # Kör alla agenter parallellt — inga blockerare
     results = []

@@ -26,5 +26,509 @@
     ],
     "dependencies": [],
     "risks": []
+  },
+  {
+    "name": "Duplicerade features i FEATURES.md",
+    "status": "Planerad",
+    "phase": "Bug",
+    "priority_tag": "KRITISKT",
+    "description": "FEATURES.md listar 'Fixa starta granskning kraschar' och 'Syntax-guard för Python-filer i apply_and_push' två gånger vardera. update_features_md()-funktionen i app.py genererar duplicerade rader och behöver dedupliceringslogik. [Fil: app.py]",
+    "source": "kod-iterator",
+    "iteration": 1
+  },
+  {
+    "name": "patch_apply_and_push.py och startup_patch.py existerar fortfarande trots att de ",
+    "status": "Planerad",
+    "phase": "Arkitektur",
+    "priority_tag": "KRITISKT",
+    "description": "Enligt pending_changes.json ska patch_apply_and_push.py och startup_patch.py raderas när monkey-patching ersätts med direkt integration, men STRUKTURINDEX.md visar att båda filerna fortfarande existerar i rotkatalogen och skapar konfliktrisk. [Fil: patch_apply_and_push.py]",
+    "source": "kod-iterator",
+    "iteration": 1
+  },
+  {
+    "name": "apply_and_push har ingen timeout-hantering för git add per fil",
+    "status": "Planerad",
+    "phase": "Bug",
+    "priority_tag": "Normal",
+    "description": "I den nya apply_and_push i pending_changes.json saknar varje subprocess.run för 'git add' timeout-parameter, medan git commit och push har det. En hängande git-add-operation kan blockera hela pipeline-tråden utan återhämtning. [Fil: app.py]",
+    "source": "kod-iterator",
+    "iteration": 1
+  },
+  {
+    "name": "app.py är 163KB / 3346 rader — en enda fil utan moduluppdelning",
+    "status": "Planerad",
+    "phase": "Arkitektur",
+    "priority_tag": "Normal",
+    "description": "Hela backend-logiken ligger i en enda fil vilket bryter mot single responsibility och gör det svårt att testa isolerat. Trots att DECISIONS.md motiverar detta bör åtminstone kritiska subsystem (git, agents, pipeline) extraheras till egna moduler för att minska risk vid Edit-verktyg-trunkering som redan dokumenterats som känt problem. [Fil: app.py]",
+    "source": "kod-iterator",
+    "iteration": 1
+  },
+  {
+    "name": "settings.json innehåller API-nycklar utan kryptering",
+    "status": "Planerad",
+    "phase": "Säkerhet",
+    "priority_tag": "KRITISKT",
+    "description": "SCHEMA.md visar att settings.json lagrar api_key (Anthropic) och github_token i klartext. Filen hanteras utanför git men skickas via /api/settings-endpointen. Det saknas maskering av nycklar i API-svar och ingen varning om filen råkar hamna i repo. [Fil: app.py]",
+    "source": "kod-iterator",
+    "iteration": 1
+  },
+  {
+    "name": "Background tasks använder ensure_future utan felhantering — tysta krascher",
+    "status": "Planerad",
+    "phase": "Bug",
+    "priority_tag": "Normal",
+    "description": "PATTERNS.md visar mönstret 'except: pass' i bakgrundsuppgifter vilket sväljer alla undantag tyst. Pipeline-fel som agent-krascher eller push-fel loggas aldrig och användaren får ingen feedback, vilket försvårar felsökning av t.ex. 'Starta granskning kraschar'-bugg. [Fil: app.py]",
+    "source": "kod-iterator",
+    "iteration": 1
+  },
+  {
+    "name": "queue.json saknar maxgräns — kan växa obegränsat",
+    "status": "Planerad",
+    "phase": "MVP",
+    "priority_tag": "Önskelista",
+    "description": "add_to_queue-endpointen lägger till utan att kontrollera köns storlek. Vid automatisk suggestion-generering (from_suggestion: true) kan kön fyllas med hundratals objekt som aldrig rensas, vilket påverkar laddningstid och minnesfotavtryck för load_queue(). [Fil: app.py]",
+    "source": "kod-iterator",
+    "iteration": 1
+  },
+  {
+    "name": "Background tasks sväljer alla undantag med bare except: pass",
+    "status": "Planerad",
+    "phase": "Bug",
+    "priority_tag": "KRITISKT",
+    "description": "PATTERNS.md visar att bakgrundsuppgifter använder 'except: pass' vilket tystar ALLA fel inklusive systemnivåundantag som KeyboardInterrupt och SystemExit. Ersätt med 'except Exception as e: logger.error(...)' och lägg till proper loggning. [Fil: app.py]",
+    "source": "kod-iterator",
+    "iteration": 2
+  },
+  {
+    "name": "fix_duplicate.py och git_setup.py är kvarglömda engångsskript",
+    "status": "Planerad",
+    "phase": "Arkitektur",
+    "priority_tag": "Normal",
+    "description": "STRUKTURINDEX.md visar att fix_duplicate.py (118 rader) och git_setup.py (110 rader med egen git-funktion) fortfarande finns i rotkatalogen. Dessa verkar vara engångsverktyg som förorenar projektstrukturen och riskerar att köras av misstag. [Fil: fix_duplicate.py]",
+    "source": "kod-iterator",
+    "iteration": 2
+  },
+  {
+    "name": "project_settings.json exponerar Supabase-nycklar i klartext utan kryptering",
+    "status": "Planerad",
+    "phase": "Säkerhet",
+    "priority_tag": "KRITISKT",
+    "description": "project_settings.json innehåller fält för supabase_dev_key och supabase_prod_key i klartext, på samma sätt som settings.json med API-nycklar. Det saknas .gitignore-verifiering och ingen varning finns om dessa råkar committtas med projektet. [Fil: project_settings.json]",
+    "source": "kod-iterator",
+    "iteration": 2
+  },
+  {
+    "name": "apply_and_push loopar git add per fil utan att hantera enskilda fel",
+    "status": "Planerad",
+    "phase": "Bug",
+    "priority_tag": "Normal",
+    "description": "I den nya apply_and_push-implementationen i pending_changes.json körs 'subprocess.run git add f' i en loop utan att kontrollera returncode per fil — om en enskild git add misslyckas fortsätter funktionen tyst och committar en inkomplett ändring. [Fil: app.py]",
+    "source": "kod-iterator",
+    "iteration": 2
+  },
+  {
+    "name": "CLAUDE.md anger felaktigt antal agenter (9 vs 10 i DEFAULT_AGENTS)",
+    "status": "Planerad",
+    "phase": "Förbättring",
+    "priority_tag": "Önskelista",
+    "description": "CLAUDE.md dokumenterar 9 agenter i tabellen men ARCHITECTURE.md och app.py refererar till 10 agent-definitioner i DEFAULT_AGENTS. Denna inkonsistens i dokumentationen kan vilseleda AI-agenter som läser minnesfiler vid kodgenerering. [Fil: CLAUDE.md]",
+    "source": "kod-iterator",
+    "iteration": 2
+  },
+  {
+    "name": "Ingen rate limiting eller autentisering på API-endpoints",
+    "status": "Planerad",
+    "phase": "Säkerhet",
+    "priority_tag": "KRITISKT",
+    "description": "Alla POST-endpoints (t.ex. /api/chat, /api/build, /api/push) saknar autentisering och rate limiting enligt ARCHITECTURE.md. Eftersom servern körs på 0.0.0.0:8000 enligt start.bat är den åtkomlig från hela nätverket och kan missbrukas för att trigga kostsamma Claude API-anrop. [Fil: app.py]",
+    "source": "kod-iterator",
+    "iteration": 2
+  },
+  {
+    "name": "ThreadPoolExecutor saknar maxgräns för parallella agent-körningar",
+    "status": "Planerad",
+    "phase": "MVP",
+    "priority_tag": "Normal",
+    "description": "review_feature kör alla agenter parallellt med ThreadPoolExecutor utan att specificera max_workers, vilket innebär att 10 agenter körs simultant och kan orsaka API rate limiting mot Anthropic samt minnesproblem vid flera parallella reviews. Sätt ett explicit max_workers baserat på antal agenter. [Fil: app.py]",
+    "source": "kod-iterator",
+    "iteration": 2
+  },
+  {
+    "name": "pending_changes.json innehåller patch-instruktioner som klartext istället för st",
+    "status": "Planerad",
+    "phase": "Arkitektur",
+    "priority_tag": "KRITISKT",
+    "description": "pending_changes.json blandar faktiska fil-ändringar med inline patch-instruktioner som 'PATCH: Radera rad 702–731' i content-fältet — detta är inte maskinläsbart och kräver manuell tolkning. Patch-logiken bör vara strukturerad (rad-nummer, operation-typ) eller ersättas med kompletta fil-ersättningar. [Fil: pending_changes.json]",
+    "source": "kod-iterator",
+    "iteration": 3
+  },
+  {
+    "name": "syntax_guard.py skapar temporära filer utan att garantera cleanup vid SIGKILL",
+    "status": "Planerad",
+    "phase": "Bug",
+    "priority_tag": "Normal",
+    "description": "tempfile.mkstemp() i validate_python_syntax() städas upp i finally-blocket men om processen dödas hårt (SIGKILL/OOM) lämnas .py-filer kvar i systemets temp-mapp. Använd tempfile.NamedTemporaryFile(delete=True) eller context manager-pattern för garanterad cleanup. [Fil: syntax_guard.py]",
+    "source": "kod-iterator",
+    "iteration": 3
+  },
+  {
+    "name": "apply_and_push ignorerar returkod från individuella 'git add'-anrop",
+    "status": "Planerad",
+    "phase": "Bug",
+    "priority_tag": "KRITISKT",
+    "description": "I den nya apply_and_push i pending_changes.json körs subprocess.run för varje 'git add f' utan att kontrollera returncode — en fil som inte kan stageas (t.ex. utanför repo, låst) failar tyst och commit fortsätter ändå med inkompletta ändringar. Lägg till felkontroll och avbryt vid misslyckad staging. [Fil: pending_changes.json]",
+    "source": "kod-iterator",
+    "iteration": 3
+  },
+  {
+    "name": "DECISIONS.md har datum '2026-06-08' som är i framtiden — inkonsekvent tidsstämpe",
+    "status": "Planerad",
+    "phase": "Förbättring",
+    "priority_tag": "Önskelista",
+    "description": "Alla beslut i DECISIONS.md är daterade 2026-06-08 vilket är ett framtida datum (eller felinmatat), medan queue.json har timestamps från 2026-06-09. Systemet saknar validering av datum-format och konsistens i dokumentationen vilket försvårar faktisk historikspårning. [Fil: DECISIONS.md]",
+    "source": "kod-iterator",
+    "iteration": 3
+  },
+  {
+    "name": "generate_strukturindex (rad 499) inkluderar settings.json-referenser i indexet s",
+    "status": "Planerad",
+    "phase": "Säkerhet",
+    "priority_tag": "Normal",
+    "description": "STRUKTURINDEX.md genereras automatiskt och indexerar alla filer inklusive settings.json och project_settings.json med storlek och metadata. Om STRUKTURINDEX.md committas till git (vilket FEATURES.md visar att den gör — den finns i projects/ishoo-creator/) exponeras filstruktur och storlek på känsliga konfigfiler. [Fil: app.py]",
+    "source": "kod-iterator",
+    "iteration": 3
+  },
+  {
+    "name": "load_memory begränsar till 16000 tecken men trunkerar utan varning — kan ge inko",
+    "status": "Planerad",
+    "phase": "Bug",
+    "priority_tag": "Normal",
+    "description": "Enligt ARCHITECTURE.md läser load_memory 6 minnesfiler med max 16000 tecken totalt. Om trunkering sker mitt i en DECISIONS.md eller PATTERNS.md-fil får agenter ett halvt dokument som kontext utan att veta att data saknas, vilket kan leda till felaktiga beslut. Lägg till varning/loggning vid trunkering och trunkera alltid på filgräns. [Fil: app.py]",
+    "source": "kod-iterator",
+    "iteration": 3
+  },
+  {
+    "name": "queue.json saknar fas-validering — items kan ha ogiltiga phase-värden",
+    "status": "Planerad",
+    "phase": "Förbättring",
+    "priority_tag": "Önskelista",
+    "description": "SCHEMA.md definierar att phase ska vara 'MVP|v1|v2' men add_to_queue-endpointen (rad 2267) saknar validering av phase-värdet mot tillåtna värden. En item med phase='v99' eller phase='' skulle sparas utan fel och orsaka rendering-problem i FEATURES.md-uppdateringar via update_features_md. [Fil: app.py]",
+    "source": "kod-iterator",
+    "iteration": 3
+  },
+  {
+    "name": "pending_changes.json innehåller patch-instruktioner som klartext utan versionsha",
+    "status": "Planerad",
+    "phase": "Arkitektur",
+    "priority_tag": "KRITISKT",
+    "description": "patch-fältet i pending_changes.json innehåller fri text med radreferenser (t.ex. 'rad 702-888') som blir ogiltiga så snart app.py ändras — strukturerade operationer (replace_function, insert_after, delete_range) med namnbaserad identifiering behövs istället. [Fil: pending_changes.json]",
+    "source": "kod-iterator",
+    "iteration": 4
+  },
+  {
+    "name": "git add i apply_and_push kontrollerar inte returkod per fil och sväljer fel",
+    "status": "Planerad",
+    "phase": "Bug",
+    "priority_tag": "KRITISKT",
+    "description": "I den nya apply_and_push i pending_changes.json körs subprocess.run för 'git add' per fil utan att kontrollera returncode — en misslyckad staging av en fil leder ändå till commit med inkompletta ändringar utan felmeddelande. [Fil: pending_changes.json]",
+    "source": "kod-iterator",
+    "iteration": 4
+  },
+  {
+    "name": "STRUKTURINDEX.md inkluderar settings.json och patch_apply_and_push.py i indexet",
+    "status": "Planerad",
+    "phase": "Säkerhet",
+    "priority_tag": "KRITISKT",
+    "description": "STRUKTURINDEX.md listar settings.json (med API-nycklar) och kvarglömda filer som patch_apply_and_push.py i sitt filträd — om indexet skickas till AI-agenter exponeras känsliga sökvägar och förvirrar agenter med föråldrad struktur. [Fil: STRUKTURINDEX.md]",
+    "source": "kod-iterator",
+    "iteration": 4
+  },
+  {
+    "name": "queue.json har datum '2026-06-09' i framtiden — inkonsekvent med DECISIONS.md",
+    "status": "Planerad",
+    "phase": "Förbättring",
+    "priority_tag": "Önskelista",
+    "description": "Alla 'added'-timestamps i queue.json är daterade '2026-06-09' vilket är ett framtida datum, precis som DECISIONS.md-problemet — systemklocka eller tidsstämpelgenerering är felinställd och bör valideras/korrigeras vid tillägg. [Fil: queue.json]",
+    "source": "kod-iterator",
+    "iteration": 4
+  },
+  {
+    "name": "syntax_guard.py saknar hantering av tempfile vid OSError under mkstemp",
+    "status": "Planerad",
+    "phase": "Bug",
+    "priority_tag": "Normal",
+    "description": "Om os.fdopen() kastar ett undantag efter tempfile.mkstemp() men före finally-blocket stängs file descriptor:n aldrig — fd-läcka uppstår. Wrappa mkstemp-resultat i ett with-block eller stäng fd explicit i finally. [Fil: syntax_guard.py]",
+    "source": "kod-iterator",
+    "iteration": 4
+  },
+  {
+    "name": "PATTERNS.md dokumenterar 'except: pass' som rekommenderat mönster för background",
+    "status": "Planerad",
+    "phase": "Förbättring",
+    "priority_tag": "KRITISKT",
+    "description": "PATTERNS.md visar ett kodexempel med 'except: pass' som officiellt mönster för bakgrundsuppgifter — detta normaliserar tysta krascher i hela kodbasen och bör ersättas med logging och specifik undantagshantering i dokumentationen. [Fil: PATTERNS.md]",
+    "source": "kod-iterator",
+    "iteration": 4
+  },
+  {
+    "name": "features.json saknar 'id'-fält vilket bryter mot SCHEMA.md-specifikationen",
+    "status": "Planerad",
+    "phase": "Bug",
+    "priority_tag": "Normal",
+    "description": "SCHEMA.md definierar att features.json-objekt ska ha fälten id, name, phase, status, spec och created — men features.json i roten saknar id, phase, status och created, vilket kan orsaka KeyError i load_features och relaterade endpoints. [Fil: features.json]",
+    "source": "kod-iterator",
+    "iteration": 4
+  },
+  {
+    "name": "git add kontrollerar inte returkod i den nya apply_and_push i pending_changes.js",
+    "status": "Planerad",
+    "phase": "Bug",
+    "priority_tag": "KRITISKT",
+    "description": "I den föreslagna apply_and_push i pending_changes.json körs 'git add' med subprocess.run men returkoden kontrolleras aldrig — filer som misslyckas att stageas leder ändå till commit-försök med partiella ändringar. [Fil: pending_changes.json]",
+    "source": "kod-iterator",
+    "iteration": 5
+  },
+  {
+    "name": "pending_changes.json innehåller app.py-patch med radnummerbaserade instruktioner",
+    "status": "Planerad",
+    "phase": "Arkitektur",
+    "priority_tag": "KRITISKT",
+    "description": "Patch-instruktionerna refererar specifika radnummer (702–888, 890) som blir felaktiga så snart app.py redigeras — det finns ingen mekanism för att validera att radnumren stämmer innan patchen appliceras, vilket kan leda till att fel kod raderas. [Fil: pending_changes.json]",
+    "source": "kod-iterator",
+    "iteration": 5
+  },
+  {
+    "name": "STRUKTURINDEX.md uppdateras inte atomärt — race condition vid samtidiga skrivnin",
+    "status": "Planerad",
+    "phase": "Bug",
+    "priority_tag": "Normal",
+    "description": "generate_strukturindex (rad 499) och _regen_index (rad 2149) kan triggas parallellt från flera async-endpoints (push, rebuild_strukturindex, onboard) utan lås — detta kan ge korrupt eller inkomplett STRUKTURINDEX.md vid parallella anrop. [Fil: app.py]",
+    "source": "kod-iterator",
+    "iteration": 5
+  },
+  {
+    "name": "update_features_md saknar idempotens — kan skapa ytterligare dubbletter vid varj",
+    "status": "Planerad",
+    "phase": "Bug",
+    "priority_tag": "Normal",
+    "description": "Funktionen update_features_md (rad 2338) skriver om FEATURES.md baserat på features.json, men eftersom features.json saknar 'id'-fält (känt sedan tidigare) finns risk att samma feature matchas på namn och skrivs dubbelt om funktionen anropas utan att listan deduplicerats korrekt. [Fil: app.py]",
+    "source": "kod-iterator",
+    "iteration": 5
+  },
+  {
+    "name": "start_file_watcher (rad 3326) saknar stoppmekanik och läcker resurser vid omstar",
+    "status": "Planerad",
+    "phase": "Bug",
+    "priority_tag": "Normal",
+    "description": "on_event('startup') startar en _watch-coroutine med asyncio men det finns ingen on_event('shutdown') som avbryter den — vid hot reload via uvicorn --reload skapas en ny watcher-loop utan att den gamla stängs, vilket läcker resurser och kan ge dubbla events. [Fil: app.py]",
+    "source": "kod-iterator",
+    "iteration": 5
+  },
+  {
+    "name": "ARCHITECTURE.md anger att app.py är ~1680 rader men den faktiska storleken är 33",
+    "status": "Planerad",
+    "phase": "Förbättring",
+    "priority_tag": "Önskelista",
+    "description": "ARCHITECTURE.md-kommentaren '~1680 rader' och CLAUDE.md:s '~1680 rader' är kraftigt inaktuella — dokumentationen anger fel storlek vilket ger agenter felaktiga antaganden om filens struktur och var kod ska infogas. [Fil: ARCHITECTURE.md]",
+    "source": "kod-iterator",
+    "iteration": 5
+  },
+  {
+    "name": "consult_feature (rad 2672) har 115 raders inline agent-logik utan timeout på ind",
+    "status": "Planerad",
+    "phase": "MVP",
+    "priority_tag": "Normal",
+    "description": "consult_feature kör agenter via ThreadPoolExecutor men varje enskilt run_agent-anrop saknar timeout — en hängande Ollama-agent kan blockera hela konsultationen utan att användaren får feedback eller möjlighet att avbryta. [Fil: app.py]",
+    "source": "kod-iterator",
+    "iteration": 5
+  },
+  {
+    "name": "pending_changes.json innehåller patch-instruktioner med 'action':'patch' som ej ",
+    "status": "Planerad",
+    "phase": "Bug",
+    "priority_tag": "KRITISKT",
+    "description": "SCHEMA.md specificerar att action-fältet ska vara 'create|modify|delete', men pending_changes.json använder 'patch' som action-värde. Koden som läser pending_changes saknar hantering för detta odokumenterade värde vilket kan orsaka tystfallande fel vid apply. [Fil: pending_changes.json]",
+    "source": "kod-iterator",
+    "iteration": 6
+  },
+  {
+    "name": "git push-returkod ignoreras delvis — 'error' i stderr ger falskt negativ vid leg",
+    "status": "Planerad",
+    "phase": "Bug",
+    "priority_tag": "KRITISKT",
+    "description": "I apply_and_push (rad 843) kontrolleras om 'error' finns i stderr.lower(), men git skriver ofta informationsmeddelanden till stderr (t.ex. 'remote: Resolving deltas') som kan innehålla ord som matchar — push kan alltså rapporteras som misslyckad trots att den lyckades, eller vice versa. [Fil: app.py]",
+    "source": "kod-iterator",
+    "iteration": 6
+  },
+  {
+    "name": "validate_file_changes hanterar inte fallet när 'content' är None — kraschar på N",
+    "status": "Planerad",
+    "phase": "Bug",
+    "priority_tag": "KRITISKT",
+    "description": "I syntax_guard.py kontrolleras 'if not content or not content.strip()' men om fc.get('content', '') returnerar ett icke-string-värde (t.ex. None från felaktig JSON) kraschar .strip()-anropet med AttributeError. Typkontroll saknas. [Fil: syntax_guard.py]",
+    "source": "kod-iterator",
+    "iteration": 6
+  },
+  {
+    "name": "STRUKTURINDEX.md regenereras till root men innehåller känsliga sökvägar inklusiv",
+    "status": "Planerad",
+    "phase": "Säkerhet",
+    "priority_tag": "Normal",
+    "description": "generate_strukturindex (rad 499) skriver STRUKTURINDEX.md till projektroten och inkluderar filstorlekar för settings.json. Om STRUKTURINDEX.md committas till git-repot exponeras metadata om konfigurationsfiler för externa aktörer. Filen bör explicit exkluderas via .gitignore. [Fil: app.py]",
+    "source": "kod-iterator",
+    "iteration": 6
+  },
+  {
+    "name": "ConnectionManager.broadcast saknar lock — concurrent WebSocket-sändningar kan or",
+    "status": "Planerad",
+    "phase": "Bug",
+    "priority_tag": "Normal",
+    "description": "ConnectionManager (rad 1468) itererar över self.active_connections utan asyncio-lås medan agenter kör parallellt via ThreadPoolExecutor och anropar broadcast. En klient som kopplar från mitt i iterationen kan orsaka 'set changed size during iteration'-fel. [Fil: app.py]",
+    "source": "kod-iterator",
+    "iteration": 6
+  },
+  {
+    "name": "start_file_watcher (_watch) körs som evig loop utan stoppmekanisk — omöjlig att ",
+    "status": "Planerad",
+    "phase": "Arkitektur",
+    "priority_tag": "Normal",
+    "description": "Funktionen _watch (rad 3328) är en asyncio-loop som startas vid app-startup utan cancellation token eller shutdown-event. Vid uvicorn-restart eller SIGTERM kan loopen hänga och blockera clean shutdown, vilket leder till zombie-tasks. [Fil: app.py]",
+    "source": "kod-iterator",
+    "iteration": 6
+  },
+  {
+    "name": "queue.json saknar validering av 'phase'-fältets värde mot tillåtna faser vid add",
+    "status": "Planerad",
+    "phase": "Förbättring",
+    "priority_tag": "Önskelista",
+    "description": "Endpoint add_to_queue (rad 2267) sparar items i queue.json utan att verifiera att 'phase' är ett av de tillåtna värdena ('MVP', 'v1', 'v2') enligt SCHEMA.md. Ogiltiga phase-värden kan sedan orsaka fel i update_features_md som antar giltiga fas-namn vid generering av FEATURES.md. [Fil: app.py]",
+    "source": "kod-iterator",
+    "iteration": 6
+  },
+  {
+    "name": "apply_and_push kontrollerar inte returkod från git add per fil",
+    "status": "Planerad",
+    "phase": "Bug",
+    "priority_tag": "KRITISKT",
+    "description": "I pending_changes.json:s nya apply_and_push anropas subprocess.run för 'git add' utan att kontrollera returncode — en misslyckad staging sväljs tyst och commit körs ändå med ofullständiga ändringar. [Fil: pending_changes.json]",
+    "source": "kod-iterator",
+    "iteration": 7
+  },
+  {
+    "name": "generate_strukturindex listar fix_duplicate.py och git_setup.py som aktiva filer",
+    "status": "Planerad",
+    "phase": "Arkitektur",
+    "priority_tag": "Normal",
+    "description": "STRUKTURINDEX.md visar fix_duplicate.py (118 rader) och git_setup.py (110 rader) som aktiva filer trots att de är engångsskript — generate_strukturindex bör ha en exkluderingslista för kvarglömda verktyg. [Fil: app.py]",
+    "source": "kod-iterator",
+    "iteration": 7
+  },
+  {
+    "name": "pending_changes.json innehåller 'action: patch' med radnummerbaserade instruktio",
+    "status": "Planerad",
+    "phase": "Arkitektur",
+    "priority_tag": "KRITISKT",
+    "description": "app.py-patchen i pending_changes.json refererar explicita radnummer (702–888, 890) som ogiltifieras vid minsta ändring i filen — patch-formatet saknar kontextbaserad matching (t.ex. git diff -U3) och kan appliceras på fel ställe utan felmeddelande. [Fil: pending_changes.json]",
+    "source": "kod-iterator",
+    "iteration": 7
+  },
+  {
+    "name": "validate_python_syntax hanterar inte mkstemp-fel vid fd-läcka om fdopen misslyck",
+    "status": "Planerad",
+    "phase": "Bug",
+    "priority_tag": "Normal",
+    "description": "I syntax_guard.py öppnas tmp_fd med mkstemp men om os.fdopen() kastar ett undantag stängs aldrig fd — finally-blocket försöker bara os.unlink(tmp_path) men den öppna fileskriptorn läcker, vilket kan orsaka resursbrist vid hög belastning. [Fil: syntax_guard.py]",
+    "source": "kod-iterator",
+    "iteration": 7
+  },
+  {
+    "name": "CLAUDE.md anger felaktigt filstorlek (~1680 rader) medan app.py är 3346 rader",
+    "status": "Planerad",
+    "phase": "Förbättring",
+    "priority_tag": "Normal",
+    "description": "CLAUDE.md dokumenterar 'app.py (~1680 rader)' men STRUKTURINDEX.md och ARCHITECTURE.md visar 3346 rader respektive 163KB — agenter som använder CLAUDE.md som referens får fel uppfattning om kodens komplexitet och var kod ska placeras. [Fil: CLAUDE.md]",
+    "source": "kod-iterator",
+    "iteration": 7
+  },
+  {
+    "name": "queue.json saknar validering av att 'phase' matchar tillåtna värden i SCHEMA.md",
+    "status": "Planerad",
+    "phase": "Bug",
+    "priority_tag": "Önskelista",
+    "description": "Queue-item med id=3 och id=4 har phase='v1' vilket är giltigt, men det finns ingen körtidsvalidering i add_to_queue-endpointen som säkerställer att phase är 'MVP|v1|v2' — ogiltiga värden accepteras och kan bryta UI-kategorisering. [Fil: app.py]",
+    "source": "kod-iterator",
+    "iteration": 7
+  },
+  {
+    "name": "WebSocket broadcast saknar timeout och kan blockera event loop vid tröga kliente",
+    "status": "Planerad",
+    "phase": "MVP",
+    "priority_tag": "KRITISKT",
+    "description": "manager.broadcast() i ConnectionManager itererar över alla anslutna klienter och awaitar send_json utan timeout — en långsam eller hängande WebSocket-klient kan blockera hela broadcasten och fördröja alla övriga klientuppdateringar under pipelinekörning. [Fil: app.py]",
+    "source": "kod-iterator",
+    "iteration": 7
+  },
+  {
+    "name": "apply_and_push kontrollerar inte returkod för individuella git add-anrop",
+    "status": "Planerad",
+    "phase": "Bug",
+    "priority_tag": "KRITISKT",
+    "description": "I pending_changes.json:s nya apply_and_push körs subprocess.run för git add per fil utan att kontrollera returncode — en misslyckad staging ignoreras tyst och commit kan innehålla ofullständiga ändringar. Lägg till kontroll av result.returncode != 0 och returnera fel vid misslyckad staging. [Fil: pending_changes.json]",
+    "source": "kod-iterator",
+    "iteration": 8
+  },
+  {
+    "name": "STRUKTURINDEX.md listas som minnesfil i SCHEMA.md men är inte en av de sex prior",
+    "status": "Planerad",
+    "phase": "Förbättring",
+    "priority_tag": "Normal",
+    "description": "SCHEMA.md specificerar exakt sex minnesfiler (CLAUDE.md, SCHEMA.md, PATTERNS.md, ARCHITECTURE.md, DECISIONS.md, FEATURES.md), men STRUKTURINDEX.md finns i projects/ishoo-creator/ och kan läsas av load_memory — detta skapar inkonsistens mellan schema-spec och faktisk filstruktur som kan förvirra agenter. [Fil: SCHEMA.md]",
+    "source": "kod-iterator",
+    "iteration": 8
+  },
+  {
+    "name": "validate_python_syntax hanterar inte fallet där os.fdopen misslyckas — fd läcker",
+    "status": "Planerad",
+    "phase": "Bug",
+    "priority_tag": "KRITISKT",
+    "description": "I syntax_guard.py öppnas tmp_fd med os.fdopen, men om os.fdopen kastar ett undantag (t.ex. EMFILE) stängs aldrig file descriptorn från mkstemp — finally-blocket anropar bara os.unlink. Lägg till explicit os.close(tmp_fd) i ett try/except runt os.fdopen-anropet. [Fil: syntax_guard.py]",
+    "source": "kod-iterator",
+    "iteration": 8
+  },
+  {
+    "name": "generate_strukturindex inkluderar känsliga filer utan filtrering av innehåll",
+    "status": "Planerad",
+    "phase": "Säkerhet",
+    "priority_tag": "KRITISKT",
+    "description": "STRUKTURINDEX.md visar explicit att settings.json (med API-nycklar) och project_settings.json (med Supabase-nycklar) finns i rotkatalogen. generate_strukturindex (rad 499 i app.py) bör explicit exkludera settings.json, project_settings.json och *.env från indexet för att förhindra att känsliga sökvägar sprids via agenternas minneskontextk. [Fil: app.py]",
+    "source": "kod-iterator",
+    "iteration": 8
+  },
+  {
+    "name": "queue.json-items saknar validering av phase-värden mot tillåten enum vid add_to_",
+    "status": "Planerad",
+    "phase": "Bug",
+    "priority_tag": "Normal",
+    "description": "add_to_queue-endpointen (rad 2267) sparar items i queue.json utan att validera att phase är en av de tillåtna värdena MVP|v1|v2 enligt SCHEMA.md — korrupta phase-värden kan orsaka att update_features_md genererar felaktig FEATURES.md med okänd fas-sektion. [Fil: app.py]",
+    "source": "kod-iterator",
+    "iteration": 8
+  },
+  {
+    "name": "pending_changes.json action='patch' är inte ett giltigt värde i SCHEMA.md",
+    "status": "Planerad",
+    "phase": "Arkitektur",
+    "priority_tag": "Normal",
+    "description": "SCHEMA.md definierar att action endast får vara 'create'|'modify'|'delete', men pending_changes.json använder action='patch' för app.py och start.bat — detta bryter mot schemat och gör att kod som itererar file_changes och kontrollerar action-värden kan missa eller felhantera dessa filer. [Fil: pending_changes.json]",
+    "source": "kod-iterator",
+    "iteration": 8
+  },
+  {
+    "name": "PATTERNS.md dokumenterar bare except:pass som kanoniskt mönster — sprider antipa",
+    "status": "Planerad",
+    "phase": "Förbättring",
+    "priority_tag": "KRITISKT",
+    "description": "PATTERNS.md visar aktivt 'except: pass' i kodexemplet för background tasks, vilket innebär att Snickaren och andra agenter reproducerar detta tysta felsväljarsmönster i all ny kod. Ersätt exemplet med except Exception as e: logger.error(...) eller liknande med explicit loggning. [Fil: PATTERNS.md]",
+    "source": "kod-iterator",
+    "iteration": 8
   }
 ]

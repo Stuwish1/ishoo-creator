@@ -2686,7 +2686,7 @@ function renderAgents(agents){
     html += fas1.map(agentRow).join('');
   }
   if(fas2blocker.length){
-    html += phaseHeader('Fas 2 — Blockerande','#e55');
+    html += phaseHeader('Fas 2 — Säkerhet & Kvalitet','#e55');
     html += fas2blocker.map(agentRow).join('');
   }
   const fas3 = currentAgents.filter(a=>a.phase===3);
