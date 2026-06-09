@@ -754,12 +754,12 @@ header h1{font-size:14px;font-weight:700;margin-right:4px;}
       <div class="settings-section active" id="ss-general">
         <div class="form-group">
           <label>Anthropic API-nyckel</label>
-          <input type="password" id="s-api-key" placeholder="sk-ant-...">
+          <form autocomplete="off" onsubmit="return false;" style="display:contents"><input type="password" id="s-api-key" placeholder="sk-ant-..."></form>
           <small>Hämta från console.anthropic.com</small>
         </div>
         <div class="form-group">
           <label>GitHub Personal Access Token</label>
-          <input type="password" id="s-github-token" placeholder="ghp_...">
+          <form autocomplete="off" onsubmit="return false;" style="display:contents"><input type="password" id="s-github-token" placeholder="ghp_..."></form>
           <small>Behövs för Snickaren — repo-läsning och push. Skapa på github.com/settings/tokens</small>
         </div>
         <div class="form-row">
@@ -859,7 +859,7 @@ header h1{font-size:14px;font-weight:700;margin-right:4px;}
           </div>
           <div class="form-group">
             <label>Supabase Dev Anon Key</label>
-            <input type="password" id="ps-supa-dev-key" placeholder="eyJ...">
+            <form autocomplete="off" onsubmit="return false;" style="display:contents"><input type="password" id="ps-supa-dev-key" placeholder="eyJ..."></form>
           </div>
         </div>
         <div style="font-size:11px;font-weight:600;color:var(--red);margin:12px 0 8px;">🔴 Prod-miljö</div>
@@ -870,7 +870,7 @@ header h1{font-size:14px;font-weight:700;margin-right:4px;}
           </div>
           <div class="form-group">
             <label>Supabase Prod Anon Key</label>
-            <input type="password" id="ps-supa-prod-key" placeholder="eyJ...">
+            <form autocomplete="off" onsubmit="return false;" style="display:contents"><input type="password" id="ps-supa-prod-key" placeholder="eyJ..."></form>
           </div>
         </div>
         <div style="font-size:11px;color:var(--muted);margin-top:4px;">Env-filer (.env.development och .env.production) skapas automatiskt i repot när Snickaren klonar.</div>
@@ -883,7 +883,7 @@ header h1{font-size:14px;font-weight:700;margin-right:4px;}
         </div>
         <div class="form-group">
           <label>Vercel API Token</label>
-          <input type="password" id="ps-vercel-token" placeholder="xxxxxxxxxxxxxxxxxxxxxx">
+          <form autocomplete="off" onsubmit="return false;" style="display:contents"><input type="password" id="ps-vercel-token" placeholder="xxxxxxxxxxxxxxxxxxxxxx"></form>
           <small>Skapas under Account Settings → Tokens på vercel.com</small>
         </div>
         <div class="form-row">
@@ -2448,19 +2448,19 @@ async function loadHealth(){
       let fixHtml='';
       if(!ok){
         if(step.inline==='claude'){
-          fixHtml=`<div style="margin-top:8px;padding-left:22px;display:flex;gap:6px;align-items:center;">
-            <input id="inline-claude" type="password" placeholder="sk-ant-..." autocomplete="off"
+          fixHtml=`<form autocomplete="off" onsubmit="return false;" style="margin-top:8px;padding-left:22px;display:flex;gap:6px;align-items:center;">
+            <input id="inline-claude" type="password" placeholder="sk-ant-..." autocomplete="new-password"
               style="flex:1;padding:5px 8px;border-radius:5px;border:1px solid var(--border);background:var(--bg-2);color:var(--text);font-size:12px;">
             <button onclick="saveInlineKey('claude')" style="padding:5px 10px;border-radius:5px;background:var(--accent);color:#fff;border:none;cursor:pointer;font-size:12px;">Spara</button>
             <a href="https://console.anthropic.com" target="_blank" style="font-size:11px;color:var(--accent);">Skaffa nyckel →</a>
-          </div>`;
+          </form>`;
         }else if(step.inline==='github'){
-          fixHtml=`<div style="margin-top:8px;padding-left:22px;display:flex;gap:6px;align-items:center;">
-            <input id="inline-github" type="password" placeholder="ghp_..." autocomplete="off"
+          fixHtml=`<form autocomplete="off" onsubmit="return false;" style="margin-top:8px;padding-left:22px;display:flex;gap:6px;align-items:center;">
+            <input id="inline-github" type="password" placeholder="ghp_..." autocomplete="new-password"
               style="flex:1;padding:5px 8px;border-radius:5px;border:1px solid var(--border);background:var(--bg-2);color:var(--text);font-size:12px;">
             <button onclick="saveInlineKey('github')" style="padding:5px 10px;border-radius:5px;background:var(--accent);color:#fff;border:none;cursor:pointer;font-size:12px;">Spara</button>
             <a href="https://github.com/settings/tokens/new?scopes=repo&description=IshooCreator" target="_blank" style="font-size:11px;color:var(--accent);">Skaffa token →</a>
-          </div>`;
+          </form>`;
         }else{
           fixHtml=`<div style="font-size:11px;color:#b45309;padding-left:22px;margin-top:4px;">👉 ${step.fix}</div>`;
         }
