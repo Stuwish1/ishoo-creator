@@ -381,5 +381,92 @@
       "källa": "UX-granskare"
     },
     "created": "2026-06-09T13:23:16.395685"
+  },
+  {
+    "id": 27,
+    "name": "Syntax-guard för Python-filer i apply_and_push",
+    "phase": "MVP",
+    "status": "Planerad",
+    "spec": {
+      "name": "Syntax-guard för Python-filer i apply_and_push",
+      "phase": "MVP",
+      "problem": "Snickaren kan pusha trasig Python-kod (SyntaxError) till repo utan att det upptäcks förrän servern kraschar vid omstart",
+      "solution": "Validera alla .py-filer med py_compile.compile() i apply_and_push() innan git commit. Vid fel: avbryt, broadcast WS-event, returnera felmeddelande.",
+      "users": "Alla användare av Ishoo Creator — skyddar mot kraschad dev-server",
+      "acceptance_criteria": [
+        "Om en .py-fil i file_changes har syntaxfel → push avbryts och inget committas",
+        "WS-event 'syntax_error' broadcastas med filnamn och felmeddelande",
+        "Frontend visar tydligt felmeddelande om syntax-guard triggas",
+        "Giltig Python-kod passerar utan påverkan på befintligt flöde"
+      ],
+      "dependencies": [
+        "apply_and_push (rad 823 i app.py)",
+        "py_compile (stdlib)"
+      ],
+      "risks": [
+        "Tempfil behövs för py_compile — måste rensas upp efter validering"
+      ]
+    },
+    "created": "2026-06-09T13:36:42.601455"
+  },
+  {
+    "id": 28,
+    "name": "Syntax-guard för Python-filer i apply_and_push: [Tillgänglighetsgranskaren] Knappen med ID 'gitStatusBtn' (rad 423) saknar aria-label — ",
+    "phase": "Backlog",
+    "status": "Planerad",
+    "spec": {
+      "name": "Syntax-guard för Python-filer i apply_and_push: [Tillgänglighetsgranskaren] Knappen med ID 'gitStatusBtn' (rad 423) saknar aria-label — ",
+      "description": "Knappen med ID 'gitStatusBtn' (rad 423) saknar aria-label — skärmläsare kan inte läsa syftet",
+      "källa": "Tillgänglighetsgranskaren"
+    },
+    "created": "2026-06-09T13:37:31.621977"
+  },
+  {
+    "id": 29,
+    "name": "Syntax-guard för Python-filer i apply_and_push: [UX-granskare] Onboarding-flödet saknas helt i presenterad UI — ingen wizar",
+    "phase": "Backlog",
+    "status": "Planerad",
+    "spec": {
+      "name": "Syntax-guard för Python-filer i apply_and_push: [UX-granskare] Onboarding-flödet saknas helt i presenterad UI — ingen wizar",
+      "description": "Onboarding-flödet saknas helt i presenterad UI — ingen wizard eller guidad första körning visas",
+      "källa": "UX-granskare"
+    },
+    "created": "2026-06-09T13:37:31.621991"
+  },
+  {
+    "id": 30,
+    "name": "Syntax-guard för Python-filer i apply_and_push: [Mobil/Fält] Touchmål under 44px: Flera ikoner i header (🐛, 🕐, 🖥️, ⚙️) är",
+    "phase": "Backlog",
+    "status": "Planerad",
+    "spec": {
+      "name": "Syntax-guard för Python-filer i apply_and_push: [Mobil/Fält] Touchmål under 44px: Flera ikoner i header (🐛, 🕐, 🖥️, ⚙️) är",
+      "description": "Touchmål under 44px: Flera ikoner i header (🐛, 🕐, 🖥️, ⚙️) är ca 13px font-size — för små för handskebeklädd tumme",
+      "källa": "Mobil/Fält"
+    },
+    "created": "2026-06-09T13:37:31.621995"
+  },
+  {
+    "id": 31,
+    "name": "Syntax-guard för Python-filer i apply_and_push: [Arkitekt] app.py är 3326 rader — hela backend-logiken (git, AI-agenter",
+    "phase": "Backlog",
+    "status": "Planerad",
+    "spec": {
+      "name": "Syntax-guard för Python-filer i apply_and_push: [Arkitekt] app.py är 3326 rader — hela backend-logiken (git, AI-agenter",
+      "description": "app.py är 3326 rader — hela backend-logiken (git, AI-agenter, WebSocket, API, filhantering, dev-server) bor i EN fil vilket bryter separation of concerns fundamentalt",
+      "källa": "Arkitekt"
+    },
+    "created": "2026-06-09T13:37:31.621998"
+  },
+  {
+    "id": 32,
+    "name": "Syntax-guard för Python-filer i apply_and_push: [Ansvarsfördelning] app.py är en God Object på ~3326 rader som hanterar: inställ",
+    "phase": "Backlog",
+    "status": "Planerad",
+    "spec": {
+      "name": "Syntax-guard för Python-filer i apply_and_push: [Ansvarsfördelning] app.py är en God Object på ~3326 rader som hanterar: inställ",
+      "description": "app.py är en God Object på ~3326 rader som hanterar: inställningar, projekthantering, git-operationer, AI-agenter, WebSocket, alla API-endpoints, dev-server, felhantering, versionshistorik, spec-granskning, build-verifiering och filindexering — allt i en enda fil",
+      "källa": "Ansvarsfördelning"
+    },
+    "created": "2026-06-09T13:37:31.622003"
   }
 ]

@@ -715,15 +715,35 @@ async def build_code(spec: dict, pid: str) -> tuple[list, str]:
         rd = effective_repo_dir(pid)
         # Ishoo Creator: Python/HTML projekt — ge Snickaren rätt kontext
         ctx_parts = ["PROJEKTTYP: Python/FastAPI backend (app.py) + vanilla HTML/JS frontend (index.html). INTE React/TypeScript."]
+        spec_lower_kw = json.dumps(spec, ensure_ascii=False).lower()
         for fname in ["app.py", "index.html"]:
             fp = rd / fname
             if fp.exists():
                 raw = fp.read_text(encoding="utf-8", errors="ignore")
-                idx = build_file_index(fp)
-                ctx_parts.append(
-                    f"=== {fname} — INDEX ===\n{idx}\n\n"
-                    f"=== {fname} — FULL KOD ({len(raw.splitlines())} rader) ===\n{raw}"
-                )
+                raw_lines = raw.splitlines()
+                idx_txt = build_file_index(fp)
+                # Stor fil (>600 rader): skicka index + relevanta sektioner, inte hela filen
+                if len(raw_lines) > 600:
+                    kws = [w for w in spec_lower_kw.split() if len(w) > 4][:20]
+                    relevant = []
+                    seen = set()
+                    for i2, line in enumerate(raw_lines):
+                        if any(kw in line.lower() for kw in kws):
+                            s2, e2 = max(0,i2-5), min(len(raw_lines),i2+20)
+                            key = (s2,e2)
+                            if key not in seen:
+                                seen.add(key)
+                                relevant.append(f"# rad {s2+1}-{e2}:\n" + "\n".join(raw_lines[s2:e2]))
+                    rel_txt = "\n\n".join(relevant[:6]) or "(inga matchande sektioner)"
+                    ctx_parts.append(
+                        f"=== {fname} INDEX ({len(raw_lines)} rader) ===\n{idx_txt}\n\n"
+                        f"=== {fname} RELEVANTA SEKTIONER ===\n{rel_txt}"
+                    )
+                else:
+                    ctx_parts.append(
+                        f"=== {fname} INDEX ===\n{idx_txt}\n\n"
+                        f"=== {fname} FULL KOD ({len(raw_lines)} rader) ===\n{raw}"
+                    )
         # Inkludera även JSON-datafiler om spec nämner dem
         spec_text_lower = json.dumps(spec, ensure_ascii=False).lower()
         data_files = ["features.json", "settings.json", "memory.md"]
@@ -868,8 +888,34 @@ def apply_and_push(pid: str, feature_name: str, env: str = "dev") -> str:
             fpath.parent.mkdir(parents=True, exist_ok=True)
             if fpath.name == "app.py" and fpath.exists():
                 _sh_guard.copy2(str(fpath), str(fpath)+".bak")
+            prev_size = len(fpath.read_text(encoding="utf-8",errors="ignore")) if fpath.exists() else 0
             fpath.write_text(cw, encoding="utf-8")
+            # Logga stora fil-ändringar i memory (>10% storlek-förändring)
+            if prev_size > 5000 and str(fpath).endswith('.py'):
+                new_size = len(cw)
+                change_pct = int((new_size - prev_size) / prev_size * 100)
+                if abs(change_pct) > 10:
+                    try:
+                        mem_file = project_dir(pid) / "memory.md"
+                        from datetime import datetime as _dt2
+                        ts2 = _dt2.now().strftime("%Y-%m-%d %H:%M")
+                        note = f"\n\n## 📝 FILÄNDRING {ts2}\n{fc['path']}: {prev_size} → {new_size} bytes ({change_pct:+d}%)\nFeature: {feature_name}\n"
+                        existing2 = mem_file.read_text(encoding="utf-8") if mem_file.exists() else ""
+                        mem_file.write_text(existing2 + note, encoding="utf-8")
+                    except Exception:
+                        pass
     if skipped:
+        # Logga incidenten i memory.md
+        try:
+            mem_file = project_dir(pid) / "memory.md"
+            from datetime import datetime as _dt
+            ts = _dt.now().strftime("%Y-%m-%d %H:%M")
+            incident_lines = "\n".join(skipped)
+            incident_entry = f"\n\n## ⚠️ INCIDENT {ts} — Syntax-guard aktiverades\n{incident_lines}\nFeature: {feature_name}\n"
+            existing = mem_file.read_text(encoding="utf-8") if mem_file.exists() else ""
+            mem_file.write_text(existing + incident_entry, encoding="utf-8")
+        except Exception:
+            pass
         return "SYNTAX-GUARD STOPPADE:\n" + "\n".join(skipped)
 
     # Commit på dev
