@@ -370,6 +370,45 @@ header h1{font-size:14px;font-weight:700;margin-right:4px;}
 .log-entry.type-muted .log-entry-msg{color:var(--muted);}
 .log-clear-btn{padding:4px 12px;font-size:10px;color:var(--muted);background:none;border:none;cursor:pointer;text-align:left;border-top:1px solid var(--border);flex-shrink:0;}
 .log-clear-btn:hover{color:var(--text);}
+
+/* ═══ PERSISTENT STATUS STRIP ═══ */
+.status-strip {
+  display: flex; align-items: center;
+  padding: 6px 16px;
+  font-size: 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  transition: background .3s, border-color .3s;
+  flex-shrink: 0;
+  min-height: 34px;
+}
+.status-strip.idle   { background: var(--surface); }
+.status-strip.active { background: rgba(59,130,246,.07); border-color: rgba(59,130,246,.25); }
+.status-strip.done   { background: rgba(34,197,94,.07);  border-color: rgba(34,197,94,.25); }
+.status-strip.error  { background: rgba(239,68,68,.07);  border-color: rgba(239,68,68,.25); }
+
+.status-strip-inner { display:flex; align-items:center; gap:8px; width:100%; }
+.status-phase-dot {
+  width:8px; height:8px; border-radius:50%; flex-shrink:0;
+  background: #94a3b8;
+  transition: background .3s;
+}
+.status-strip.active .status-phase-dot {
+  background: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59,130,246,.2);
+  animation: pulseDot 1.2s infinite;
+}
+.status-strip.done  .status-phase-dot { background: #22c55e; }
+.status-strip.error .status-phase-dot { background: #ef4444; }
+@keyframes pulseDot {
+  0%,100% { box-shadow: 0 0 0 2px rgba(59,130,246,.2); }
+  50%      { box-shadow: 0 0 0 5px rgba(59,130,246,.1); }
+}
+.status-phase   { font-weight:600; color:var(--text); white-space:nowrap; }
+.status-sep     { color:var(--muted); }
+.status-detail  { color:var(--muted); flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.status-elapsed { color:var(--muted); font-size:11px; white-space:nowrap; margin-left:auto; }
+
 </style>
 </head>
 <body>
@@ -446,6 +485,16 @@ header h1{font-size:14px;font-weight:700;margin-right:4px;}
       <span class="iter-banner-label" id="iterBannerLabel"></span>
     </div>
     <div class="iter-banner-steps" id="iterBannerSteps"></div>
+  </div>
+  <!-- ═══ PERSISTENT STATUS STRIP ═══ -->
+  <div id="statusStrip" class="status-strip idle">
+    <div class="status-strip-inner">
+      <div class="status-phase-dot" id="statusDot"></div>
+      <span class="status-phase" id="statusPhase">Systemet är redo</span>
+      <span class="status-sep">·</span>
+      <span class="status-detail" id="statusDetail">Väntar på din instruktion</span>
+      <span class="status-elapsed" id="statusElapsed"></span>
+    </div>
   </div>
   <div class="messages" id="messages"></div>
 
@@ -891,6 +940,65 @@ function updateLogStatus(text, state='running'){
   }
 }
 
+// ═══ STATUS STRIP ═══
+let _statusTimer = null;
+let _statusStart = null;
+let _statusElapsedInterval = null;
+
+function setStatus(phase, detail, state='active') {
+  const strip    = document.getElementById('statusStrip');
+  const phaseEl  = document.getElementById('statusPhase');
+  const detailEl = document.getElementById('statusDetail');
+  const elapsed  = document.getElementById('statusElapsed');
+  if(!strip) return;
+  strip.className = 'status-strip ' + state;
+  phaseEl.textContent  = phase;
+  detailEl.textContent = detail;
+  clearInterval(_statusElapsedInterval);
+  if(state === 'active') {
+    _statusStart = Date.now();
+    _statusElapsedInterval = setInterval(()=>{
+      const s = Math.floor((Date.now()-_statusStart)/1000);
+      elapsed.textContent = s + 's';
+    }, 1000);
+    elapsed.textContent = '';
+  } else {
+    elapsed.textContent = '';
+  }
+  clearTimeout(_statusTimer);
+  if(state === 'done' || state === 'error') {
+    _statusTimer = setTimeout(()=>{
+      clearInterval(_statusElapsedInterval);
+      setStatus('Systemet är redo','Väntar på din instruktion','idle');
+    }, 8000);
+  }
+}
+
+const STATUS_MAP = {
+  'review_start':      (m) => setStatus('🔍 Granskar', 'Agenter analyserar "'+m.feature+'"…'),
+  'review_agent_done': (m) => setStatus('🔍 Granskar', m.name+' klar — '+(m.findings_count||0)+' fynd'),
+  'review_done':       (m) => setStatus('✅ Granskning klar', 'Alla agenter klara för "'+m.feature+'"', 'done'),
+  'consult_start':     (m) => setStatus('💬 Konsulterar', (m.agents||[]).length+' agenter frågas om "'+m.feature+'"…'),
+  'consult_agent_done':(m) => setStatus('💬 Konsulterar', m.name+' svarade'),
+  'consult_done':      (m) => setStatus('💬 Konsultation klar', 'Plan skapad för "'+m.feature+'"', 'done'),
+  'build_start':       (m) => setStatus('🔨 Snickaren bygger', '"'+m.feature+'" — skriver kod…'),
+  'build_progress':    (m) => setStatus('🔨 Snickaren bygger', m.message||'Bearbetar filer…'),
+  'build_done':        (m) => setStatus('✅ Bygget klart', (m.diffs||[]).length+' fil(er) ändrade — väntar på ditt godkännande', 'done'),
+  'build_error':       (m) => setStatus('❌ Byggfel', m.message||'Snickaren stötte på ett fel', 'error'),
+  'push_start':        (m) => setStatus('🚀 Pushar kod', 'Skickar till '+(m.env||'dev')+'-branch…'),
+  'push_done':         (m) => setStatus('✅ Push klar', 'Kod pushad till '+(m.env||'dev'), 'done'),
+  'debug_start':       (m) => setStatus('🐛 Felsökaren', 'Analyserar det byggda…'),
+  'debug_done':        (m) => setStatus('🐛 Felsökning klar', (m.issues_found||0)+' problem hittade', 'done'),
+  'inspector_done':    (m) => setStatus('🏗️ Besiktning', m.approved ? 'Koden godkänd ✅' : 'Problem hittades ⚠️', m.approved?'done':'error'),
+  'loop_blocked':      (m) => setStatus('⏸️ Väntar', 'Pipeline körs redan ('+m.elapsed+'s)…', 'active'),
+};
+
+function handleStatusStrip(msg) {
+  const h = STATUS_MAP[msg.type];
+  if(h) h(msg);
+}
+
+
 function addLog(msg, type='info'){
   const container = document.getElementById('logEntries');
   if(!container) return;
@@ -1017,6 +1125,8 @@ function connectWS(){
   ws.onclose=()=>{document.getElementById('connDot').classList.remove('ok');setTimeout(connectWS,3000);};
   ws.onmessage=e=>{
     const msg=JSON.parse(e.data);
+    // Status-strip alltid uppdaterad
+    handleStatusStrip(msg);
     // Deduplicera — varje unik kombination av type+feature+iteration
     const dedupKey = `${msg.type}|${msg.feature||''}|${msg.iteration||''}|${msg.id||''}|${msg.status||''}`;
     if(msg.type !== 'hot_reload'){
