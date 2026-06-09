@@ -1456,7 +1456,7 @@ def phases_summary(pid: str) -> str:
     phases = {"MVP":[],"v1":[],"v2":[]}
     for f in features:
         ph = f.get("phase","MVP")
-        if ph in phases: phases[ph].append(f"{f['name']} [{f['status']}]")
+        if ph in phases: phases[ph].append(f"{f['name']} [{f.get('status','Planerad')}]")
     return "\n".join(f"{ph}: {', '.join(items) if items else 'inga'}" for ph,items in phases.items())
 
 def _ollama_available() -> bool:
@@ -3822,4 +3822,4 @@ async def iterate_agents(payload: dict):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000, reload=False)
+    uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=True, reload_excludes=["projects/*","memory/*","*.json","*.md"])
