@@ -530,5 +530,68 @@
     "description": "PATTERNS.md visar aktivt 'except: pass' i kodexemplet för background tasks, vilket innebär att Snickaren och andra agenter reproducerar detta tysta felsväljarsmönster i all ny kod. Ersätt exemplet med except Exception as e: logger.error(...) eller liknande med explicit loggning. [Fil: PATTERNS.md]",
     "source": "kod-iterator",
     "iteration": 8
+  },
+  {
+    "name": "git add returncode kontrolleras inte per fil i apply_and_push",
+    "status": "Planerad",
+    "phase": "Bug",
+    "priority_tag": "KRITISKT",
+    "description": "I apply_and_push (rad 843) körs subprocess.run för 'git add f' i en loop utan att kontrollera returncode — om en enskild fil misslyckas (t.ex. utanför repo, låst fil) fortsätter funktionen tyst och skapar en inkomplett commit. Lägg till 'if result.returncode != 0: return False, f\"git add misslyckades för {f}: {result.stderr}\"' efter varje git add-anrop. [Fil: app.py]",
+    "source": "kod-iterator",
+    "iteration": 1
+  },
+  {
+    "name": "update_features_md saknar dedupliceringslogik och genererar dubbletter",
+    "status": "Planerad",
+    "phase": "Bug",
+    "priority_tag": "KRITISKT",
+    "description": "Funktionen update_features_md (rad 2338) lägger till features utan att kontrollera om de redan finns i filen, vilket orsakar duplicerade rader i FEATURES.md (dokumenterat i features.json). Lägg till en set-baserad kontroll mot befintliga feature-namn innan append för att säkerställa idempotens. [Fil: app.py]",
+    "source": "kod-iterator",
+    "iteration": 1
+  },
+  {
+    "name": "get_settings_api exponerar api_key och github_token i klartext i API-svar",
+    "status": "Planerad",
+    "phase": "Säkerhet",
+    "priority_tag": "KRITISKT",
+    "description": "Endpoint GET /api/settings (rad 1488) returnerar hela settings-objektet inklusive api_key och github_token i klartext till klienten. Maskera känsliga fält i svaret (t.ex. 'sk-ant-...abc' → 'sk-ant-***') och returnera aldrig fullständiga nycklar via API — frontend behöver bara veta om de är satta eller inte. [Fil: app.py]",
+    "source": "kod-iterator",
+    "iteration": 1
+  },
+  {
+    "name": "consult_feature har 115 raders inline agent-logik utan extrahering eller timeout",
+    "status": "Planerad",
+    "phase": "Arkitektur",
+    "priority_tag": "Normal",
+    "description": "Funktionen consult_feature (rad 2672) innehåller 115 rader inbäddad agent-orchestration som duplicerar logik från review_feature utan timeout per enskild agent-anrop. Extrahera den delade agent-körningslogiken till en gemensam hjälpfunktion och sätt individuell timeout (t.ex. 60s) per agent-anrop för att förhindra att en hängande Ollama-agent blockerar hela konsultationen. [Fil: app.py]",
+    "source": "kod-iterator",
+    "iteration": 1
+  },
+  {
+    "name": "WebSocket broadcast blockerar event loop — ingen timeout eller undantagshanterin",
+    "status": "Planerad",
+    "phase": "MVP",
+    "priority_tag": "Normal",
+    "description": "ConnectionManager.broadcast (rad 1472) itererar över alla anslutna klienter och awaitar send_json utan timeout — en långsam eller frånkopplad klient kan blockera broadcast för alla övriga. Lägg till asyncio.wait_for med kort timeout (t.ex. 5s) per sändning och fånga WebSocketDisconnect för att automatiskt ta bort döda klienter ur listan. [Fil: app.py]",
+    "source": "kod-iterator",
+    "iteration": 1
+  },
+  {
+    "name": "ThreadPoolExecutor i review_feature saknar maxgräns och kan förbruka alla trådar",
+    "status": "Planerad",
+    "phase": "MVP",
+    "priority_tag": "Normal",
+    "description": "review_feature (rad 1727) skapar en ThreadPoolExecutor utan explicit max_workers-gräns, vilket innebär att 10 agenter × N simultana reviews kan skapa hundratals trådar och tömma systemresurser. Sätt max_workers=len(agents) eller ett konfigurerat maxvärde, och dela eventuellt en global executor för hela applikationen. [Fil: app.py]",
+    "source": "kod-iterator",
+    "iteration": 1
+  },
+  {
+    "name": "load_memory läser upp till 16000 tecken men trunkerar tyst utan varning till anr",
+    "status": "Planerad",
+    "phase": "Förbättring",
+    "priority_tag": "Önskelista",
+    "description": "Funktionen load_memory (rad 271) begränsar varje minnesfil till 16000 tecken totalt men loggar ingen varning när trunkering sker — agenter som förlitar sig på fullständig kontext (t.ex. ARCHITECTURE.md) kan ta beslut baserat på ofullständig information. Lägg till en logger.warning när innehållet trunkeras och inkludera hur många tecken som utelämnades. [Fil: app.py]",
+    "source": "kod-iterator",
+    "iteration": 1
   }
 ]
