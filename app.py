@@ -841,49 +841,106 @@ def get_agents_from_settings(s: dict = None):
 
 
 def _gather_live_context(proj: dict) -> str:
-    """Samlar git-status, backlog, fil-träd och terminalinfo för Projektledaren."""
-    import subprocess as _sp
+    """Samlar och VERIFIERAR kontext för Projektledaren — fakta, inte påståenden."""
+    import subprocess as _sp, ast as _ast, re as _re
     pid = proj["id"]
     rd = effective_repo_dir(pid)
     parts = []
 
-    # Git-status
+    # ── Git-status + branch ──────────────────────────────────────────────────
     try:
-        gs = _sp.run(["git", "status", "--short"], cwd=str(rd), capture_output=True, text=True, timeout=5)
-        gl = _sp.run(["git", "log", "--oneline", "-8"], cwd=str(rd), capture_output=True, text=True, timeout=5)
-        parts.append(f"GIT STATUS:\n{gs.stdout.strip() or 'Rent (inga ändringar)'}\n\nSENASTE COMMITS:\n{gl.stdout.strip() or 'Inga commits'}")
+        gs  = _sp.run(["git","status","--short"],    cwd=str(rd), capture_output=True, text=True, timeout=5)
+        gl  = _sp.run(["git","log","--oneline","-8"],cwd=str(rd), capture_output=True, text=True, timeout=5)
+        gbr = _sp.run(["git","branch","--show-current"], cwd=str(rd), capture_output=True, text=True, timeout=3)
+        parts.append(
+            f"GIT STATUS: {gs.stdout.strip() or 'Rent'}\n"
+            f"BRANCH: {gbr.stdout.strip() or 'okänd'}\n"
+            f"SENASTE COMMITS:\n{gl.stdout.strip() or 'Inga'}"
+        )
     except Exception as e:
         parts.append(f"GIT: kunde inte köra ({e})")
 
-    # Backlog — aktuella features
+    # ── Backlog ──────────────────────────────────────────────────────────────
     try:
         features = load_features(pid)
-        blocked = [f for f in features if f.get("status") == "Blockerad"]
-        planerade = [f for f in features if f.get("status") == "Planerad"][:8]
-        byggda = [f for f in features if f.get("status") in ("Byggd","Klar","Pushad")][-5:]
+        blocked  = [f for f in features if f.get("status") == "Blockerad"]
+        planerad = [f for f in features if f.get("status") == "Planerad"][:6]
+        byggda   = [f for f in features if f.get("status") in ("Byggd","Klar","Pushad")][-4:]
         bl = "\n".join(f"  ⛔ {f['name']}" for f in blocked)
-        pl = "\n".join(f"  · {f['name']} [{f.get('phase','?')}]" for f in planerade)
+        pl = "\n".join(f"  · {f['name']} [{f.get('phase','?')}]" for f in planerad)
         bg = "\n".join(f"  ✅ {f['name']}" for f in byggda)
         parts.append(f"BACKLOG ({len(features)} totalt):\nBlockerade:{chr(10)+bl if bl else ' Inga'}\nPlanerade:\n{pl or '  Inga'}\nNyligen byggda:\n{bg or '  Inga'}")
     except Exception:
         pass
 
-    # Fil-träd (top-level)
+    # ── VERIFIERING AV KOD — faktakontroll mot disk ──────────────────────────
+    # Hitta Python-filer att verifiera
+    py_files = []
+    for candidate in ["app.py", "main.py", "server.py", "backend.py"]:
+        fp = rd / candidate
+        if fp.exists():
+            py_files.append(fp)
+            break
+    # Ishoo Creator:s egna app.py
+    self_app = Path(__file__).parent / "app.py"
+    if self_app.exists() and self_app not in py_files:
+        py_files.append(self_app)
+
+    verification_lines = []
+    for fp in py_files[:2]:
+        try:
+            src = fp.read_text(encoding="utf-8", errors="ignore")
+            fname = fp.name
+
+            # Syntax-check
+            try:
+                _ast.parse(src)
+                verification_lines.append(f"  ✅ {fname}: Python-syntax OK")
+            except SyntaxError as se:
+                verification_lines.append(f"  ❌ {fname}: SyntaxError rad {se.lineno} — {se.msg}")
+
+            # Duplicerade funktioner / endpoints
+            defs = _re.findall(r"^(?:async )?def (\w+)", src, _re.MULTILINE)
+            dupes = [d for d in set(defs) if defs.count(d) > 1]
+            if dupes:
+                for d in dupes[:5]:
+                    positions = [i+1 for i,line in enumerate(src.splitlines()) if _re.match(rf"(?:async )?def {d}\b", line.strip())]
+                    verification_lines.append(f"  ⚠️ {fname}: DUPLICERAD FUNKTION '{d}' på rader {positions}")
+            else:
+                verification_lines.append(f"  ✅ {fname}: Inga duplicerade funktioner")
+
+            # Endpoints-duplikat (FastAPI)
+            routes = _re.findall(r'@app\.(get|post|put|delete|patch)\("([^"]+)"', src)
+            seen_routes = {}
+            for method, path in routes:
+                key = f"{method.upper()} {path}"
+                seen_routes[key] = seen_routes.get(key, 0) + 1
+            dupe_routes = {k:v for k,v in seen_routes.items() if v > 1}
+            if dupe_routes:
+                for r,c in list(dupe_routes.items())[:3]:
+                    verification_lines.append(f"  ⚠️ {fname}: DUPLICERAD ENDPOINT {r} ({c}x)")
+            else:
+                verification_lines.append(f"  ✅ {fname}: Inga duplicerade endpoints")
+
+            # Filstorlek
+            lines_count = src.count("\n") + 1
+            verification_lines.append(f"  📄 {fname}: {lines_count} rader, {len(src)//1024}KB")
+
+        except Exception as e:
+            verification_lines.append(f"  ⚠️ Kunde inte verifiera {fp.name}: {e}")
+
+    if verification_lines:
+        parts.append("VERIFIERAD KOD-STATUS (körd mot disk — inte backlog-påståenden):\n" + "\n".join(verification_lines))
+
+    # ── Fil-träd ─────────────────────────────────────────────────────────────
     try:
         if rd.exists():
             tree = "\n".join(
                 f"  {'📁' if (rd/f).is_dir() else '📄'} {f}"
                 for f in sorted(rd.iterdir(), key=lambda p: (p.is_file(), p.name))
-                if not f.startswith('.') and f not in ('node_modules', '__pycache__', '.git')
+                if not str(f).startswith('.') and str(f) not in ('node_modules','__pycache__','.git')
             )
-            parts.append(f"FIL-TRÄD (rot):\n{tree[:800]}")
-    except Exception:
-        pass
-
-    # Aktuell branch
-    try:
-        branch = _sp.run(["git", "branch", "--show-current"], cwd=str(rd), capture_output=True, text=True, timeout=3)
-        parts.append(f"AKTUELL BRANCH: {branch.stdout.strip() or 'okänd'}")
+            parts.append(f"FIL-TRÄD (rot):\n{tree[:600]}")
     except Exception:
         pass
 
@@ -973,12 +1030,24 @@ Du har FULL FRIHET att:
 - Specificera features baserat på vad du vet om projektet
 Du BEHÖVER INTE fråga om saker du kan rimligt anta. Kör på.
 
-KRITISK REGEL — DU HAR FULL TILLGÅNG:
-Du får automatiskt hela kodbasen, git-historik, backlog och terminalutdata VARJE gång.
-FRÅGA ALDRIG användaren om saker du kan se i kontexten nedan.
-Om du ser ett fel i koden — berätta vad det är och hur det fixas.
-Om du ser git-status — använd den informationen direkt.
-Du KAN INTE bygga kod (det är Snickarens jobb) men du KAN läsa, analysera och ge exakta instruktioner.
+━━━ DIN SUPERKRAFT: VERIFIERAD FAKTA ━━━
+Varje svar du ger är grundat på VERIFIERADE fakta — inte gissningar.
+Du får automatiskt:
+  • Git-status och senaste commits (körd live)
+  • Backlog med alla features och deras status
+  • KOD-VERIFIERING: syntax-kontroll, duplikat-check, filstorlek — KÖRD MOT DISK
+
+VIKTIGT: Sektionen "VERIFIERAD KOD-STATUS" nedan är fakta som körts precis nu.
+Om verifieringen säger ✅ — tro på det, oavsett vad backlog påstår.
+Om backlog säger att ett problem finns men verifieringen säger ✅ — är problemet LÖST.
+Säg det explicit: "Enligt verifieringen är detta redan löst."
+
+ANALYSREGLER:
+1. Läs VERIFIERAD KOD-STATUS FÖRST — det är sanningen
+2. Backlog-påståenden är hypoteser tills verifieringen bekräftar dem
+3. Om du ser ⚠️ i verifieringen — det är ett verkligt problem, prioritera det
+4. Du KAN INTE bygga kod (det är Snickarens jobb) men DU analyserar, identifierar och ger exakta instruktioner
+5. Var direkt och konkret — "rad 2856 har X" är bättre än "det kan finnas ett problem"
 
 PROJEKTMINNE:
 {memory}
