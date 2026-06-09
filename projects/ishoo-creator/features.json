@@ -153,7 +153,7 @@
     "id": 11,
     "name": "3-fas pipeline med tabbar",
     "phase": "MVP",
-    "status": "Granskas",
+    "status": "I dev",
     "spec": {
       "name": "3-fas pipeline med tabbar",
       "phase": "MVP",
@@ -295,5 +295,91 @@
       "källa": "Arkitekt"
     },
     "created": "2026-06-09T13:13:21.993493"
+  },
+  {
+    "id": 21,
+    "name": "Syntax-guard för Python-filer i apply_and_push",
+    "phase": "MVP",
+    "status": "Planerad",
+    "spec": {
+      "name": "Syntax-guard för Python-filer i apply_and_push",
+      "phase": "MVP",
+      "problem": "Snickaren kan skriva syntaktiskt felaktig Python till disk vilket kraschar hela app.py och låser systemet",
+      "solution": "ast.parse()-check på allt .py-innehåll INNAN fil skrivs — plus .bak backup. Fel kastar ValueError som stoppas i pipeline och skickas till UI.",
+      "users": "Projektledaren / systemet självt",
+      "acceptance_criteria": [
+        "Syntaxfel i .py-fil blockerar skrivning och returnerar tydligt felmeddelande",
+        "app.py.bak skapas automatiskt innan varje skrivning av app.py",
+        "UI får error-event via WebSocket vid blockerat syntax-fel",
+        "Icke-Python-filer påverkas inte av checken"
+      ],
+      "dependencies": [
+        "apply_and_push() i app.py rad ~823"
+      ],
+      "risks": [
+        "ast.parse() fångar ej runtime-fel — bara syntax. Täcker ej logikfel."
+      ]
+    },
+    "created": "2026-06-09T13:22:30.358655"
+  },
+  {
+    "id": 22,
+    "name": "Syntax-guard för Python-filer i apply_and_push: [Tillgänglighetsgranskaren] Saknade aria-label på interaktiva ikoner (≈20+ ikoner utan a",
+    "phase": "Backlog",
+    "status": "Planerad",
+    "spec": {
+      "name": "Syntax-guard för Python-filer i apply_and_push: [Tillgänglighetsgranskaren] Saknade aria-label på interaktiva ikoner (≈20+ ikoner utan a",
+      "description": "Saknade aria-label på interaktiva ikoner (≈20+ ikoner utan accessible names)",
+      "källa": "Tillgänglighetsgranskaren"
+    },
+    "created": "2026-06-09T13:23:16.395665"
+  },
+  {
+    "id": 23,
+    "name": "Syntax-guard för Python-filer i apply_and_push: [Säkerhetsansvarig] settings.json innehåller api_key (sk-ant-...) och github_tok",
+    "phase": "Backlog",
+    "status": "Planerad",
+    "spec": {
+      "name": "Syntax-guard för Python-filer i apply_and_push: [Säkerhetsansvarig] settings.json innehåller api_key (sk-ant-...) och github_tok",
+      "description": "settings.json innehåller api_key (sk-ant-...) och github_token (ghp_...) i klartext på disk — om filen råkar committas exponeras credentials publikt",
+      "källa": "Säkerhetsansvarig"
+    },
+    "created": "2026-06-09T13:23:16.395676"
+  },
+  {
+    "id": 24,
+    "name": "Syntax-guard för Python-filer i apply_and_push: [Arkitekt] God-object anti-pattern: app.py är 3245 rader och innehåller",
+    "phase": "Backlog",
+    "status": "Planerad",
+    "spec": {
+      "name": "Syntax-guard för Python-filer i apply_and_push: [Arkitekt] God-object anti-pattern: app.py är 3245 rader och innehåller",
+      "description": "God-object anti-pattern: app.py är 3245 rader och innehåller allt — konfiguration, git-logik, AI-agenter, API-endpoints, filhantering, WebSocket-hantering och business logic i en enda fil. Detta är ett medvetet beslut enligt DECISIONS.md men skapar allvarliga separation of concerns-problem.",
+      "källa": "Arkitekt"
+    },
+    "created": "2026-06-09T13:23:16.395680"
+  },
+  {
+    "id": 25,
+    "name": "Syntax-guard för Python-filer i apply_and_push: [Ansvarsfördelning] app.py är en God Object på ~3245 rader — hanterar settings, ",
+    "phase": "Backlog",
+    "status": "Planerad",
+    "spec": {
+      "name": "Syntax-guard för Python-filer i apply_and_push: [Ansvarsfördelning] app.py är en God Object på ~3245 rader — hanterar settings, ",
+      "description": "app.py är en God Object på ~3245 rader — hanterar settings, projekthantering, git, AI-agenter, WebSocket, 30+ API-endpoints, dev-server, versionshistorik, build-verifiering, spec-granskning och filindexering i EN fil",
+      "källa": "Ansvarsfördelning"
+    },
+    "created": "2026-06-09T13:23:16.395682"
+  },
+  {
+    "id": 26,
+    "name": "Syntax-guard för Python-filer i apply_and_push: [UX-granskare] Modal för filöppning/stängning saknas dokumentation - använd",
+    "phase": "Backlog",
+    "status": "Planerad",
+    "spec": {
+      "name": "Syntax-guard för Python-filer i apply_and_push: [UX-granskare] Modal för filöppning/stängning saknas dokumentation - använd",
+      "description": "Modal för filöppning/stängning saknas dokumentation - användaren vet inte hur man öppnar Settings/Queue/History",
+      "källa": "UX-granskare"
+    },
+    "created": "2026-06-09T13:23:16.395685"
   }
 ]

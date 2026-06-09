@@ -7,7 +7,7 @@
 - [] **Clipboard Image Input** - Planerad
 - [] **Fixa starta granskning kraschar** - Planerad
 - [] **Fixa starta granskning kraschar** - Planerad
-- -> **3-fas pipeline med tabbar** - Granskas
+- -> **3-fas pipeline med tabbar** - I dev
 
 ## v1
 *(Inga annu)*

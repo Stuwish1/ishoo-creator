@@ -1,9 +1,9 @@
 <response>
-<summary>Implementerar 3-fas pipeline med tabbar (Design → Bygg → QA) med godkännande mellan faser, fas-state i pipeline_state.json, nya WebSocket-endpoints, och tab-UI i index.html</summary>
+<summary>Implementerar syntax-guard för Python-filer i apply_and_push() med ast.parse()-check, .bak backup för app.py, och WebSocket error-event vid blockerade syntaxfel. Icke-Python-filer påverkas inte.</summary>
 <file>
   <path>app.py</path>
   <action>modify</action>
-  <description>Lägger till tre nya endpoints för pipeline-faser samt pipeline_state.json-persistering efter System Health Check-sektionen</description>
+  <description>Lägger till validate_python_syntax() helper och integrerar syntax-guard + .bak backup i apply_and_push(). Syntaxfel i .py-filer blockerar skrivning och kastar ValueError som fångas i push-endpoint och skickas via WebSocket.</description>
   <content>
 #!/usr/bin/env python3
 """
@@ -16,7 +16,7 @@ Allt konfigurerbart inifrån UI:
 - Per-projekt Supabase-konfiguration
 """
 
-import os, json, asyncio, re, difflib, subprocess, threading
+import os, json, asyncio, re, difflib, subprocess, threading, ast
 from pathlib import Path
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
@@ -38,6 +38,7 @@ PROJECTS_DIR  = Path("projects")
 SETTINGS_FILE = Path("settings.json")
 
 SONNET_DEFAULT = "claude-sonnet-4-6"
+OPUS_DEFAULT   = "claude-opus-4-6"
 HAIKU_DEFAULT  = "claude-haiku-4-5-20251001"
 
 # ─── Settings ─────────────────────────────────────────────────────────────────
@@ -155,20 +156,11 @@ Returnera ENBART JSON: {"status":"GODKÄND"/"AVVISAD","findings":["..."],"severi
      "prompt":'Du ansvarar ENBART för prestanda. Granska: onödiga re-renders, saknad useMemo/useCallback, tunga beräkningar i render-loop, stora bundle-imports, saknad lazy loading, långsamma queries, saknad paginering. Returnera ENBART JSON: {"status":"GODKÄND"/"AVVISAD","findings":["..."],"severity":"LOW"/"MEDIUM"/"HIGH","suggestions":["..."]}'},
 
     # ── UX ───────────────────────────────────────────────────────────────────────
-    {"id":"ux","name":"UX Designern","emoji":"🎨","model":"sonnet","enabled":True,
-     "prompt":'''Du är UX Designer. Analysera feature-spec ur användarens perspektiv.
-
-Ditt jobb:
-1. Användarflöde: beskriv EXAKT steg-för-steg hur användaren interagerar
-2. Friktionspunkter: var kan användaren fastna, bli förvirrad eller göra fel?
-3. Feedback-design: hur vet användaren att något hände? (loading, success, error)
-4. Accessibility: tangentbordsnavigering, aria-labels, kontrast
-5. Microcopy: exakta knapp-texter, felmeddelanden, tooltips på svenska
-
-Ge SPECIFIKA förbättringsförslag med exakta UI-texter och interaktionsmönster.
-
-Returnera ENBART JSON: {"status":"GODKÄND","findings":["Konkret UX-observation"],"severity":"LOW","suggestions":["Exakt förbättring med UI-text och flöde"]}'''},
+    {"id":"ux","name":"UX-granskare","emoji":"🎨","model":"haiku","enabled":True,
+     "prompt":'Du ansvarar ENBART för användarupplevelse. Granska: uppfylls acceptanskriterierna, intuitivt flöde, feedback till användaren. Kommentera inte kod-struktur. Returnera ENBART JSON: {"status":"GODKÄND"/"AVVISAD","findings":["..."],"severity":"LOW"/"MEDIUM"/"HIGH","suggestions":["..."]}'},
 
     # ── Mobil ────────────────────────────────────────────────────────────────────
     {"id":"mobile","name":"Mobil/Fält","emoji":"📱","model":"haiku","enabled":True,
-     "prompt":'Du ansvarar ENBART för mobil/fält. Granska: touchmål under 44px, läsbarhet i solljus, för många steg, s
+     "prompt":'Du ansvarar ENBART för mobil/fält. Granska: touchmål under 44px, läsbarhet i solljus, för många steg, saknad offline-hantering. Tänk: handskebeklädd tumme. Returnera ENBART JSON: {"status":"GODKÄND"/"AVVISAD","findings":["..."],"severity":"LOW"/"MEDIUM"/"HIGH","suggestions":["..."]}'},
+
+    # ── UI Designer ───────────────────────────────────────
