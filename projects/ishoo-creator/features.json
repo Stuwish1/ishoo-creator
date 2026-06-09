@@ -206,5 +206,68 @@
       ]
     },
     "created": "2026-06-09T03:04:45.634803"
+  },
+  {
+    "name": "Duplikat-uppgifter om git_push_direct skapar feature-trädkaos",
+    "status": "Planerad",
+    "phase": "Arkitektur",
+    "priority_tag": "KRITISKT",
+    "description": "Features.json innehåller minst 5 separata uppgifter (id 2, 6, 7, 11) som alla beskriver exakt samma problem — duplicerad git_push_direct endpoint. Systemet saknar deduplicering vid skapande av följduppgifter, vilket leder till exponentiell uppgiftsexplosion och gör backloggen oanvändbar. [Fil: features.json]",
+    "source": "kod-iterator",
+    "iteration": 1
+  },
+  {
+    "name": "Parent_feature använder namn-strängar istället för ID-referenser",
+    "status": "Planerad",
+    "phase": "Arkitektur",
+    "priority_tag": "KRITISKT",
+    "description": "Fältet parent_feature lagrar fritext-namn (t.ex. 'Clipboard Image Input: Fixa duplicerad git_push_direct endpoint') istället för ett numeriskt ID. Detta gör referensintegritet omöjlig att upprätthålla — byt namnbyte av en feature bryter alla barn-kopplingar tyst. [Fil: features.json]",
+    "source": "kod-iterator",
+    "iteration": 1
+  },
+  {
+    "name": "GitHub-token lagras i klartext i project_settings.json utan kryptering",
+    "status": "Planerad",
+    "phase": "Säkerhet",
+    "priority_tag": "KRITISKT",
+    "description": "project_settings.json innehåller github-fältet och SCHEMA.md visar att settings.json lagrar github_token som klartext lokalt. Det finns ingen indikation på att dessa filer skyddas med filsystembehörigheter (chmod 600) eller krypteras — alla processer på maskinen kan läsa dem. [Fil: project_settings.json]",
+    "source": "kod-iterator",
+    "iteration": 1
+  },
+  {
+    "name": "Saknat status-värde 'Blockerad' i SCHEMA.md",
+    "status": "Planerad",
+    "phase": "Bug",
+    "priority_tag": "Normal",
+    "description": "SCHEMA.md definierar giltiga status-värden som 'Planerad|Granskas|Byggs|I dev|Klar', men features.json använder aktivt statusen 'Blockerad' (id 1 och 4). Denna diskrepans innebär att valideringslogik baserad på schemat felaktigt skulle avvisa giltiga states. [Fil: SCHEMA.md]",
+    "source": "kod-iterator",
+    "iteration": 1
+  },
+  {
+    "name": "Trunkerade feature-namn förlorar kritisk information",
+    "status": "Planerad",
+    "phase": "Förbättring",
+    "priority_tag": "Normal",
+    "description": "Feature-namn i features.json trunkeras mitt i meningen (t.ex. id 7: '...git_push_direct definier', id 12: 'Implementera Clipboard Image Inpu'). Systemet som genererar dessa namn saknar namnlängdsbegränsning med graceful truncation — ersätt med ett separat kort title-fält + långt description-fält. [Fil: features.json]",
+    "source": "kod-iterator",
+    "iteration": 1
+  },
+  {
+    "name": "Queue.json är tom men FEATURES.md listar 9 planerade MVP-uppgifter",
+    "status": "Planerad",
+    "phase": "Bug",
+    "priority_tag": "Normal",
+    "description": "queue.json är en tom array trots att features.json har minst 8 features med status 'Planerad' i MVP-fasen. Synkroniseringen mellan features.json och queue.json är trasig eller saknas helt — systemet har ingen mekanism för att flytta godkända features till kön automatiskt. [Fil: queue.json]",
+    "source": "kod-iterator",
+    "iteration": 1
+  },
+  {
+    "name": "Källfältet 'källa' saknas i spec-schemat men används i praktiken",
+    "status": "Planerad",
+    "phase": "Förbättring",
+    "priority_tag": "Önskelista",
+    "description": "Features id 6–10 använder ett odokumenterat fält 'källa' i spec-objektet (värden: 'Säkerhetsansvarig', 'Arkitekt', 'Felhanteringsgranskaren'). SCHEMA.md dokumenterar inte detta fält, vilket gör det osynligt för agenter som genererar nya features och leder till inkonsistent datakvalitet. [Fil: SCHEMA.md]",
+    "source": "kod-iterator",
+    "iteration": 1
   }
 ]

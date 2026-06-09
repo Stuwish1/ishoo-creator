@@ -19,7 +19,7 @@ _dev_server_proc = None
 _dev_server_pid_lock = threading.Lock()
 
 import anthropic
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, BackgroundTasks
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 

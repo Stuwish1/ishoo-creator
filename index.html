@@ -289,6 +289,62 @@ header h1{font-size:14px;font-weight:700;margin-right:4px;}
 ::-webkit-scrollbar{width:3px;}::-webkit-scrollbar-track{background:transparent;}::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
 @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.5;}}
 @keyframes bounce{0%,100%{transform:translateY(0);}50%{transform:translateY(-4px);}}
+
+/* ITERATOR */
+.iter-overlay{position:fixed;inset:0;background:rgba(0,0,0,.75);display:none;align-items:center;justify-content:center;z-index:210;backdrop-filter:blur(4px);}
+.iter-overlay.open{display:flex;}
+.iter-modal{background:var(--surface);border:1px solid var(--border);border-radius:14px;width:100%;max-width:440px;padding:22px;}
+.iter-modal h3{font-size:15px;font-weight:700;margin-bottom:4px;}
+.iter-modal p{font-size:12px;color:var(--muted);margin-bottom:18px;line-height:1.5;}
+.iter-count{display:flex;align-items:center;gap:12px;margin-bottom:14px;}
+.iter-count label{font-size:12px;color:var(--muted);white-space:nowrap;}
+.iter-count input[type=range]{flex:1;accent-color:var(--accent);}
+.iter-count-badge{background:var(--accent);color:#fff;border-radius:99px;padding:2px 10px;font-size:13px;font-weight:700;min-width:28px;text-align:center;}
+.iter-focus{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:12px;padding:8px 12px;font-family:inherit;resize:none;margin-bottom:14px;}
+.iter-focus:focus{outline:none;border-color:var(--accent);}
+.iter-btn-row{display:flex;gap:8px;justify-content:flex-end;}
+/* Iterator progress panel */
+.iter-progress{padding:10px 12px;border-bottom:1px solid var(--border);display:none;flex-direction:column;gap:6px;}
+.iter-progress.active{display:flex;}
+.iter-prog-header{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:600;}
+.iter-prog-bar-wrap{height:4px;background:var(--border);border-radius:2px;overflow:hidden;}
+.iter-prog-bar{height:100%;background:var(--accent);border-radius:2px;transition:width .4s ease;width:0%;}
+.iter-prog-steps{display:flex;gap:4px;}
+.iter-step{flex:1;height:4px;border-radius:2px;background:var(--border);transition:background .3s;}
+.iter-step.done{background:var(--green);}
+.iter-step.running{background:var(--accent);animation:pulse-step .8s ease-in-out infinite;}
+@keyframes pulse-step{0%,100%{opacity:1}50%{opacity:.4}}
+.iter-finding-pill{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:99px;font-size:10px;font-weight:600;margin:2px;}
+.cat-bug{background:rgba(239,68,68,.2);color:#ef4444;}
+.cat-säkerhet{background:rgba(239,68,68,.25);color:#f87171;}
+.cat-prestanda{background:rgba(234,179,8,.2);color:#eab308;}
+.cat-kodkvalitet{background:rgba(99,102,241,.2);color:#818cf8;}
+.cat-ux{background:rgba(59,130,246,.2);color:#60a5fa;}
+.cat-test{background:rgba(34,197,94,.2);color:#22c55e;}
+.cat-arkitektur{background:rgba(249,115,22,.2);color:#fb923c;}
+
+
+/* ITERATOR STATUS BANNER */
+.iter-banner{display:none;background:linear-gradient(90deg,rgba(99,102,241,.15),rgba(99,102,241,.05));border-bottom:2px solid var(--accent);padding:10px 16px;flex-shrink:0;flex-direction:column;gap:6px;}
+.iter-banner.active{display:flex;}
+.iter-banner-top{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:600;}
+.iter-banner-top .spin{display:inline-block;animation:spin .8s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg)}}
+.iter-banner-steps{display:flex;gap:4px;align-items:center;}
+.iter-banner-step{width:28px;height:6px;border-radius:3px;background:var(--border);transition:all .3s;}
+.iter-banner-step.done{background:var(--green);}
+.iter-banner-step.running{background:var(--accent);box-shadow:0 0 6px var(--accent);}
+.iter-banner-label{font-size:11px;color:var(--muted);margin-left:auto;}
+/* PRIORITERINGSKORT */
+.prio-card{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px;margin-top:8px;}
+.prio-card-hdr{font-size:11px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;}
+.prio-row{display:flex;align-items:flex-start;gap:8px;padding:6px 0;border-bottom:1px solid rgba(42,45,58,.5);}
+.prio-row:last-child{border-bottom:none;}
+.prio-num{width:20px;height:20px;border-radius:50%;background:var(--accent);color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px;}
+.prio-num.high{background:#ef4444;}
+.prio-num.med{background:#eab308;}
+.prio-text{font-size:12px;flex:1;line-height:1.4;}
+.prio-tag{font-size:9px;font-weight:700;padding:1px 6px;border-radius:99px;background:rgba(99,102,241,.2);color:#818cf8;margin-left:4px;}
 </style>
 </head>
 <body>
@@ -335,6 +391,9 @@ header h1{font-size:14px;font-weight:700;margin-right:4px;}
       <button onclick="explainBacklog()" id="explainBtn" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:11px;cursor:pointer;color:var(--text);font-family:inherit;display:flex;align-items:center;gap:5px;transition:all .15s" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">
         <span>🤔</span><span>Vad gör jag härnäst?</span>
       </button>
+      <button onclick="openIterator()" id="iteratorBtn" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:11px;cursor:pointer;color:var(--text);font-family:inherit;display:flex;align-items:center;gap:5px;margin-top:4px;transition:all .15s" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">
+        <span>🔄</span><span>Analysera koden</span>
+      </button>
     </div>
     <div class="feature-list" id="featureList"></div>
     <div class="phase-progress" id="phaseProgress"></div>
@@ -353,6 +412,15 @@ header h1{font-size:14px;font-weight:700;margin-right:4px;}
   <div class="chat-topbar">
     <div class="avatar">👷</div>
     <div><h2>Projektledaren</h2><p id="activeLabel">Välj eller skapa ett projekt</p></div>
+  </div>
+  <!-- ITERATOR STATUS BANNER -->
+  <div class="iter-banner" id="iterBanner">
+    <div class="iter-banner-top">
+      <span class="spin">⚙️</span>
+      <span id="iterBannerTitle">Analyserar koden...</span>
+      <span class="iter-banner-label" id="iterBannerLabel"></span>
+    </div>
+    <div class="iter-banner-steps" id="iterBannerSteps"></div>
   </div>
   <div class="messages" id="messages"></div>
 
@@ -423,6 +491,14 @@ header h1{font-size:14px;font-weight:700;margin-right:4px;}
       <span style="font-size:10px;color:var(--muted);flex:1;">PIPELINE</span>
       <span class="iter-badge" id="iterBadge">–</span>
       <button onclick="copyAgentResults()" title="Kopiera alla agentsvar" style="background:none;border:1px solid var(--border);border-radius:4px;color:var(--muted);font-size:10px;padding:2px 6px;cursor:pointer;" id="copyAgentsBtn">📋</button>
+    </div>
+    <div class="iter-progress" id="iterProgress">
+      <div class="iter-prog-header">
+        <span>🔄</span><span id="iterProgTitle">Kodanalys</span>
+        <span style="margin-left:auto;font-size:10px;color:var(--muted)" id="iterProgCount"></span>
+      </div>
+      <div class="iter-prog-steps" id="iterProgSteps"></div>
+      <div style="font-size:10px;color:var(--muted);margin-top:2px" id="iterProgStatus"></div>
     </div>
     <div style="flex:1;overflow-y:auto;" id="agentList"></div>
     <div class="pipe-footer">
@@ -987,6 +1063,89 @@ function handleWS(msg){
       `,true);
       setProgress(90,'⚠️ Besiktning — problem hittades');
     }
+  }
+
+  else if(msg.type==='iterator_start'){
+    const n=msg.iterations;
+    // Sidebar panel
+    document.getElementById('iterProgress').classList.add('active');
+    document.getElementById('iterProgTitle').textContent=`Analyserar: ${msg.project||'koden'}`;
+    document.getElementById('iterProgCount').textContent=`0 / ${n}`;
+    document.getElementById('iterProgStatus').textContent='Startar...';
+    _iterSetupSteps(n);
+    // Chat-banner
+    const banner=document.getElementById('iterBanner');
+    banner.classList.add('active');
+    document.getElementById('iterBannerTitle').textContent=`Analyserar koden — ${n} iterationer`;
+    document.getElementById('iterBannerLabel').textContent='0 / '+n;
+    // Banner-steg
+    document.getElementById('iterBannerSteps').innerHTML=
+      Array.from({length:n},(_,i)=>`<div class="iter-banner-step" id="ibs-${i+1}"></div>`).join('');
+    addMsg('assistant',`<strong>🔄 Kodanalys startar</strong> — ${n} iterationer. Jag läser igenom hela kodbasen och hittar förbättringsuppgifter...`,true);
+  }
+  else if(msg.type==='iterator_iteration'){
+    const {current,total,status,new_count,findings}=msg;
+    // Sidebar panel
+    document.getElementById('iterProgCount').textContent=`${current} / ${total}`;
+    _iterUpdateStep(current,total,status);
+    // Banner
+    document.getElementById('iterBannerLabel').textContent=`${current} / ${total}`;
+    const bs=document.getElementById(`ibs-${current}`);
+    if(bs) bs.className='iter-banner-step'+(status==='done'?' done':' running');
+    if(status==='done'&&current<total){
+      const next=document.getElementById(`ibs-${current+1}`);
+      if(next) next.className='iter-banner-step running';
+    }
+    if(status==='running'){
+      document.getElementById('iterProgStatus').textContent=`⏳ Iteration ${current} pågår...`;
+      document.getElementById('iterBannerTitle').textContent=`⏳ Iteration ${current} av ${total} — letar djupare...`;
+    } else if(status==='done'){
+      document.getElementById('iterProgStatus').textContent=`✅ Iteration ${current} klar — ${new_count||0} nya fynd`;
+      if(findings&&findings.length){
+        const pills=findings.slice(0,5).map(f=>`<span class="iter-finding-pill cat-${(f.category||'kodkvalitet').toLowerCase()}">${_catLabel(f.category)} ${f.title}</span>`).join('');
+        addMsg('assistant',`<strong>Iteration ${current} / ${total} klar:</strong> ${new_count} nya uppgifter hittade<br><div style="margin-top:5px">${pills}</div>`,true);
+      } else {
+        addMsg('assistant',`<strong>Iteration ${current} / ${total} klar:</strong> Inga nya uppgifter — kodkvaliteten ser bra ut på detta djup.`,true);
+      }
+    }
+  }
+  else if(msg.type==='iterator_done'){
+    const {total_findings,added_to_backlog,findings}=msg;
+    // Stäng banner + panel
+    document.getElementById('iterBanner').classList.remove('active');
+    const prog=document.getElementById('iterProgress');
+    document.getElementById('iterProgStatus').textContent=`✅ ${total_findings} fynd, ${added_to_backlog} tillagda`;
+    setTimeout(()=>prog.classList.remove('active'),6000);
+    // Bygg prioriteringskort — sortera: bug+säkerhet högt, sedan hög prio
+    const prio=(f)=>{
+      const cat=(f.category||'').toLowerCase();
+      const p=(f.priority||'').toLowerCase();
+      if(cat==='säkerhet'||cat==='bug') return 0;
+      if(p==='hög') return 1;
+      if(p==='medel') return 2;
+      return 3;
+    };
+    const sorted=(findings||[]).slice().sort((a,b)=>prio(a)-prio(b));
+    const top=sorted.slice(0,5);
+    const prioRows=top.map((f,i)=>{
+      const lvl=prio(f)===0?'high':prio(f)===1?'high':'med';
+      const tag=f.category||'kodkvalitet';
+      const file=f.file?`<span style="font-size:10px;color:var(--muted);font-family:monospace"> ${f.file}</span>`:'';
+      return `<div class="prio-row">
+        <div class="prio-num ${lvl}">${i+1}</div>
+        <div class="prio-text"><strong>${f.title}</strong>${file}<br><span style="font-size:11px;color:var(--muted)">${f.details||''}</span></div>
+        <span class="prio-tag">${tag}</span>
+      </div>`;
+    }).join('');
+    const cardHtml=top.length?`<div class="prio-card">
+      <div class="prio-card-hdr">🎯 Gör detta först</div>
+      ${prioRows}
+    </div>`:'';
+    addMsg('assistant',`<strong>✅ Kodanalys klar!</strong> ${total_findings} uppgifter hittades, ${added_to_backlog} nya i backlogen.${cardHtml}`,true);
+    loadFeatures();
+  }
+  else if(msg.type==='iterator_error'){
+    addMsg('assistant',`⚠️ Iteration ${msg.iteration||'?'} fel: ${msg.error}`,true);
   }
   else if(msg.type==='build_start') setProgress(5,`Snickaren bygger...`);
   else if(msg.type==='build_progress') setProgress(40,msg.message);
@@ -2179,6 +2338,248 @@ function restoreChatHistory(){
   }catch(e){}
 }
 
+
+// ═══════════════════════════════════════════════════
+//  ITERATOR — Iterativ kodanalys-agent
+// ═══════════════════════════════════════════════════
+
+function openIterator(){
+  document.getElementById('iterOverlay').classList.add('open');
+}
+function closeIterator(){
+  document.getElementById('iterOverlay').classList.remove('open');
+}
+
+async function startIterator(){
+  const n = parseInt(document.getElementById('iterRange').value);
+  const focus = document.getElementById('iterFocus').value.trim();
+  const btn = document.getElementById('iterStartBtn');
+  btn.disabled = true; btn.textContent = '⏳ Startar...';
+  try {
+    await fetch(`${API}/api/code-iterator`,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({iterations: n, focus})
+    });
+  } catch(e) {
+    addMsg('assistant','❌ Kunde inte starta kodanalys: ' + e.message);
+  }
+  btn.disabled = false; btn.textContent = '🚀 Starta analys';
+  closeIterator();
+}
+
+// Rendera steg-indikatorer
+function _iterSetupSteps(total){
+  const el = document.getElementById('iterProgSteps');
+  el.innerHTML = Array.from({length:total},(_,i)=>
+    `<div class="iter-step" id="iter-step-${i+1}"></div>`
+  ).join('');
+}
+
+function _iterUpdateStep(current, total, status){
+  for(let i=1;i<=total;i++){
+    const s = document.getElementById(`iter-step-${i}`);
+    if(!s) continue;
+    s.className = 'iter-step' + (i<current?' done': i===current?(status==='done'?' done':' running'):'');
+  }
+}
+
+function _catLabel(cat){
+  const labels = {bug:'🐛 Bug',säkerhet:'🔒 Säkerhet',prestanda:'⚡ Prestanda',
+    kodkvalitet:'🔷 Kodkvalitet',ux:'🎨 UX',test:'🧪 Test',arkitektur:'🏗️ Arkitektur'};
+  return labels[cat] || cat;
+}
+
+
+// ═══════════════════════════════════════════════════
+//  ÅTERSTÄLLDA FUNKTIONER (förlorade vid trunkering)
+// ═══════════════════════════════════════════════════
+
+// ─── TYPING INDICATOR ────────────────────────────────────────────────────────
+function showTyping(){
+  const msgs=document.getElementById('messages');
+  const id='typing-'+Date.now();
+  const el=document.createElement('div');
+  el.className='msg assistant';el.id=id;
+  el.innerHTML='<div class="bubble"><span class="typing"><span></span><span></span><span></span></span></div>';
+  msgs.appendChild(el);
+  msgs.scrollTop=msgs.scrollHeight;
+  return id;
+}
+function removeTyping(id){
+  const el=document.getElementById(id);if(el)el.remove();
+}
+
+// ─── ARKITEKTUR ───────────────────────────────────────────────────────────────
+async function loadArch(){
+  const proj=await _getActiveProj();
+  if(!proj)return;
+  try{
+    const r=await fetch(`${API}/api/arch/${proj.id}`);
+    const d=await r.json();
+    const el=document.getElementById('archText');
+    if(el) el.textContent=d.content||'Ingen arkitekturkarta ännu.\nKlicka "Generera" för att skapa en.';
+  }catch(e){}
+}
+async function _getActiveProj(){
+  try{const r=await fetch(`${API}/api/projects`);const d=await r.json();return d.active||null;}catch{return null;}
+}
+async function generateArch(){
+  const proj=await _getActiveProj();if(!proj){alert('Inget aktivt projekt.');return;}
+  const el=document.getElementById('archText');
+  if(el) el.textContent='⏳ Genererar arkitekturkarta...';
+  try{
+    const r=await fetch(`${API}/api/arch/${proj.id}/generate`,{method:'POST'});
+    const d=await r.json();
+    if(el) el.textContent=d.content||d.error||'Fel vid generering.';
+  }catch(e){if(el)el.textContent='❌ Fel: '+e.message;}
+}
+function editArch(){
+  const el=document.getElementById('archText');if(!el)return;
+  const cur=el.textContent;
+  const ta=document.createElement('textarea');
+  ta.value=cur;ta.style.cssText='width:100%;height:100%;background:var(--bg);color:var(--text);border:none;font-size:11px;font-family:monospace;resize:none;padding:4px;outline:none;';
+  const parent=el.parentElement;
+  parent.replaceChild(ta,el);
+  ta.focus();
+  ta.addEventListener('blur',async()=>{
+    const newContent=ta.value;
+    const newPre=document.createElement('pre');
+    newPre.id='archText';newPre.style.cssText='color:var(--muted);font-size:11px;';
+    newPre.textContent=newContent;
+    parent.replaceChild(newPre,ta);
+    const proj=await _getActiveProj();if(!proj)return;
+    fetch(`${API}/api/arch/${proj.id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({content:newContent})}).catch(()=>{});
+  });
+}
+
+// ─── NYTT PROJEKT ─────────────────────────────────────────────────────────────
+function openNewProject(){
+  document.getElementById('npModal').classList.add('open');
+}
+function closeNewProject(){
+  document.getElementById('npModal').classList.remove('open');
+  ['pName','pDesc','pGithub'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+}
+async function createProject(){
+  const name=(document.getElementById('pName')?.value||'').trim();
+  const desc=(document.getElementById('pDesc')?.value||'').trim();
+  const github=(document.getElementById('pGithub')?.value||'').trim();
+  if(!name){alert('Projektnamn krävs.');return;}
+  try{
+    const r=await fetch(`${API}/api/projects`,{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({name,description:desc,github_url:github})});
+    const d=await r.json();
+    if(d.ok!==false){closeNewProject();loadAll();}
+    else alert('Fel: '+(d.error||'Okänt fel'));
+  }catch(e){alert('Fel: '+e.message);}
+}
+
+// ─── PREVIEW ──────────────────────────────────────────────────────────────────
+function openPreview(){
+  document.getElementById('previewModal').classList.add('open');
+  switchPreview('dev');
+}
+function closePreview(){
+  document.getElementById('previewModal').classList.remove('open');
+  const frame=document.getElementById('previewFrame');if(frame)frame.src='about:blank';
+}
+function switchPreview(mode){
+  const urls={local:'http://localhost:3000',dev:'http://localhost:3000',prod:''};
+  const urlEl=document.getElementById('previewUrl');
+  const frame=document.getElementById('previewFrame');
+  document.querySelectorAll('.prev-tab').forEach(t=>t.classList.remove('active-dev','active-prod'));
+  const btn=document.getElementById(`prevBtn${mode.charAt(0).toUpperCase()+mode.slice(1)}`);
+  if(btn) btn.classList.add(mode==='prod'?'active-prod':'active-dev');
+  const url=urls[mode]||'about:blank';
+  if(urlEl) urlEl.textContent=url;
+  if(frame) frame.src=url;
+}
+
+// ─── VERSIONSHISTORIK ─────────────────────────────────────────────────────────
+async function openHistory(){
+  document.getElementById('historyModal').classList.add('open');
+  const list=document.getElementById('historyList');
+  if(list) list.innerHTML='<div style="color:var(--muted);font-size:12px;padding:8px;">Laddar...</div>';
+  try{
+    const proj=await _getActiveProj();if(!proj)return;
+    const r=await fetch(`${API}/api/projects/${proj.id}/history`);
+    const d=await r.json();
+    const commits=d.commits||[];
+    if(!commits.length){list.innerHTML='<div style="color:var(--muted);font-size:12px;padding:8px;">Ingen historik ännu.</div>';return;}
+    list.innerHTML=commits.map(c=>`
+      <div style="padding:8px;background:var(--bg);border-radius:6px;cursor:pointer;border:1px solid var(--border);"
+           onclick="revertTo('${c.hash}','${(c.message||'').replace(/'/g,"\\'")}')">
+        <div style="font-size:11px;font-weight:600;">${c.message||'Ingen commit-text'}</div>
+        <div style="font-size:10px;color:var(--muted);">${c.hash?.slice(0,8)||''} · ${c.date||''}</div>
+      </div>`).join('');
+  }catch(e){if(list)list.innerHTML='<div style="color:var(--red);font-size:12px;padding:8px;">Fel: '+e.message+'</div>';}
+}
+function closeHistory(){document.getElementById('historyModal').classList.remove('open');}
+async function revertTo(hash,msg){
+  if(!confirm(`Återgå till: "${msg}"?\nDetta ersätter nuvarande kod.`))return;
+  closeHistory();
+  const proj=await _getActiveProj();if(!proj)return;
+  try{
+    const r=await fetch(`${API}/api/projects/${proj.id}/revert`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({hash})});
+    const d=await r.json();
+    addMsg('assistant',d.ok?`✅ Återgick till commit \`${hash.slice(0,8)}\`.`:'❌ Revert misslyckades: '+(d.error||''));
+  }catch(e){addMsg('assistant','❌ Fel: '+e.message);}
+}
+
+// ─── FEL-MODAL ────────────────────────────────────────────────────────────────
+function openErrorModal(){document.getElementById('errorModal').classList.add('open');}
+function closeErrorModal(){document.getElementById('errorModal').classList.remove('open');}
+async function submitError(){
+  const text=(document.getElementById('errorInput')?.value||'').trim();
+  if(!text)return;
+  closeErrorModal();
+  document.getElementById('chatInput').value=`Jag fick detta fel:\n${text}`;
+  await sendMessage();
+}
+
+// ─── ONBOARDING ───────────────────────────────────────────────────────────────
+function hideOnboardingBanner(){
+  const el=document.getElementById('onboardingBanner');if(el)el.style.display='none';
+}
+
+// ─── BILDER ───────────────────────────────────────────────────────────────────
+function handleImgFiles(files){
+  Array.from(files).forEach(file=>{
+    if(!file.type.startsWith('image/'))return;
+    const reader=new FileReader();
+    reader.onload=e=>addImgData(e.target.result,file.name);
+    reader.readAsDataURL(file);
+  });
+}
+
+// ─── FELSÖKAREN (debug scan) ──────────────────────────────────────────────────
+async function runDebugScan(featureName){
+  if(!featureName)return;
+  try{
+    const proj=await _getActiveProj();if(!proj)return;
+    const r=await fetch(`${API}/api/debug-scan`,{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({feature:featureName,project_id:proj.id})});
+    const d=await r.json();
+    if(d.issues&&d.issues.length){
+      const issueList=d.issues.map(i=>`<li style="margin:3px 0">${i}</li>`).join('');
+      addMsg('assistant',`🐛 <strong>Felsökaren hittade ${d.issues.length} problem:</strong><ul style="margin:6px 0 0 16px;font-size:12px">${issueList}</ul>`,true);
+    } else {
+      addMsg('assistant','✅ <strong>Felsökaren:</strong> Inga uppenbara problem hittades.',true);
+    }
+  }catch(e){/* tyst fel — Felsökaren är inte kritisk */}
+}
+
+// ─── AGENT-HANTERING ─────────────────────────────────────────────────────────
+async function deleteAgent(id){
+  if(!confirm('Ta bort agenten?'))return;
+  try{
+    await fetch(`${API}/api/agents/${id}`,{method:'DELETE'});
+    loadSettingsData();
+  }catch(e){alert('Fel: '+e.message);}
+}
+
+
 // ─── START ────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', ()=>{
   renderAgents([]);
@@ -2191,5 +2592,24 @@ document.addEventListener('DOMContentLoaded', ()=>{
 });
 
 </script>
+
+<!-- ITERATOR MODAL -->
+<div class="iter-overlay" id="iterOverlay">
+  <div class="iter-modal">
+    <h3>🔄 Iterativ Kodanalys</h3>
+    <p>AI-agenten läser hela kodbasen och hittar förbättringsuppgifter. Varje iteration går djupare och hittar nya saker. Uppgifterna läggs automatiskt i backlogen när alla iterationer är klara.</p>
+    <div class="iter-count">
+      <label>Iterationer:</label>
+      <input type="range" id="iterRange" min="1" max="8" value="3" oninput="document.getElementById('iterCountBadge').textContent=this.value">
+      <span class="iter-count-badge" id="iterCountBadge">3</span>
+    </div>
+    <textarea class="iter-focus" id="iterFocus" rows="2" placeholder="Valfritt: specifikt fokus, t.ex. 'säkerhet och prestanda' eller 'API-design'..."></textarea>
+    <div class="iter-btn-row">
+      <button class="btn btn-outline" onclick="closeIterator()">Avbryt</button>
+      <button class="btn btn-primary" onclick="startIterator()" id="iterStartBtn">🚀 Starta analys</button>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
