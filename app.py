@@ -1044,7 +1044,14 @@ def apply_and_push(pid: str, feature_name: str, env: str = "dev") -> str:
 
 def get_agents_from_settings(s: dict = None):
     if s is None: s = load_settings()
-    agents = s.get("agents", DEFAULT_AGENTS)
+    saved = s.get("agents", DEFAULT_AGENTS)
+    # Merge: lägg till nya DEFAULT_AGENTS som saknas i sparade settings
+    saved_ids = {a["id"] for a in saved}
+    merged = list(saved)
+    for da in DEFAULT_AGENTS:
+        if da["id"] not in saved_ids:
+            merged.append(da)
+    agents = merged
     regular = [a for a in agents if not a.get("is_inspector") and a.get("enabled", True)]
     inspector_list = [a for a in agents if a.get("is_inspector") and a.get("enabled", True)]
     inspector = inspector_list[0] if inspector_list else DEFAULT_AGENTS[-1]

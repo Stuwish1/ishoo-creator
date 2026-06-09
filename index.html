@@ -2606,25 +2606,32 @@ async function saveSettings(){
 // ═══════════════════════════════════════════════════
 
 function renderAgents(agents){
-  // Uppdaterar nuvarande agentlista — med fasstöd
+  // Uppdaterad för 3-fas pipeline: Design → Bygg → QA
   const defaults = [
-    {id:'arkitekt_fas',name:'📐 Chefarkitekt',phase:1},
-    {id:'security',name:'🔒 Säkerhetsansvarig',phase:2,is_blocker:true},
-    {id:'dba',name:'🗄️ DBA',phase:2,is_blocker:true},
-    {id:'felhantering',name:'🚨 Felhantering',phase:2,is_blocker:true},
-    {id:'typgranskare',name:'🔷 Typgranskaren',phase:2,is_blocker:true},
+    {id:'arkitekt_fas',  name:'📐 Chefarkitekt',     phase:1},
+    // Fas 2 — Säkerhet & kvalitet (blockerande)
+    {id:'security',      name:'🔒 Säkerhetsansvarig', phase:2, is_blocker:true},
+    {id:'dba',           name:'🗄️ DBA',               phase:2, is_blocker:true},
+    {id:'felhantering',  name:'🚨 Felhantering',       phase:2, is_blocker:true},
+    {id:'typgranskare',  name:'🔷 Typgranskaren',      phase:2, is_blocker:true},
     {id:'beroendeanalytiker',name:'🔗 Beroendeanalytikorn',phase:2,is_blocker:true},
-    {id:'kravanalytiker',name:'🔍 Kravanalytikorn',phase:2,is_blocker:false},
-    {id:'strukturnavigator',name:'🗺️ Strukturnavigatorn',phase:2,is_blocker:false},
-    {id:'architect',name:'🏗️ Arkitekt',phase:2,is_blocker:false},
-    {id:'ansvarsfordelning',name:'⚖️ Ansvarsfördelning',phase:2,is_blocker:false},
-    {id:'tillganglighet',name:'♿ Tillgänglighet',phase:2,is_blocker:false},
-    {id:'konfiguration',name:'⚙️ Konfiguration',phase:2,is_blocker:false},
-    {id:'performance',name:'⚡ Prestanda',phase:2,is_blocker:false},
-    {id:'ux',name:'🎨 UX-granskare',phase:2,is_blocker:false},
-    {id:'mobile',name:'📱 Mobil/Fält',phase:2,is_blocker:false},
-    {id:'tester',name:'🧪 Testbarhet',phase:2,is_blocker:false},
-    {id:'domare',name:'⚖️ Domaren',is_domare:true},
+    // Fas 2 — Rådgivande
+    {id:'kravanalytiker',    name:'🔍 Kravanalytikorn',    phase:2},
+    {id:'strukturnavigator', name:'🗺️ Strukturnavigatorn', phase:2},
+    {id:'architect',         name:'🏗️ Arkitekt',           phase:2},
+    {id:'ansvarsfordelning', name:'⚖️ Ansvarsfördelning',  phase:2},
+    {id:'tillganglighet',    name:'♿ Tillgänglighet',      phase:2},
+    {id:'konfiguration',     name:'⚙️ Konfiguration',      phase:2},
+    {id:'performance',       name:'⚡ Prestanda',           phase:2},
+    {id:'ux',                name:'🎨 UX-granskare',        phase:2},
+    {id:'uidesigner',        name:'🖼️ UI Designern',        phase:2},
+    {id:'frontend',          name:'💻 Frontend Kodaren',    phase:2},
+    {id:'backend',           name:'⚙️ Backend Kodaren',     phase:2},
+    {id:'mobile',            name:'📱 Mobil/Fält',          phase:2},
+    {id:'tester',            name:'🧪 QA / Testaren',       phase:2},
+    // Fas 3 — QA (Besiktningsmannen)
+    {id:'inspector',         name:'🏗️ Besiktningsmannen',   phase:3},
+    {id:'domare',            name:'⚖️ Domaren',             is_domare:true},
   ];
   currentAgents = agents.length ? agents : defaults;
   _agentLog = {};
@@ -2662,9 +2669,14 @@ function renderAgents(agents){
     html += phaseHeader('Fas 2 — Blockerande','#e55');
     html += fas2blocker.map(agentRow).join('');
   }
+  const fas3 = currentAgents.filter(a=>a.phase===3);
   if(fas2rad.length){
     html += phaseHeader('Fas 2 — Rådgivande','#f59e0b');
     html += fas2rad.map(agentRow).join('');
+  }
+  if(fas3.length){
+    html += phaseHeader('Fas 3 — QA & Besiktning','#22c55e');
+    html += fas3.map(agentRow).join('');
   }
   if(ungrouped.length){
     html += phaseHeader('Agenter','#6366f1');
