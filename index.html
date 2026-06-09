@@ -73,8 +73,8 @@ header h1{font-size:14px;font-weight:700;margin-right:4px;}
 .f-badge{font-size:10px;padding:1px 6px;border-radius:99px;font-weight:600;white-space:nowrap;}
 .f-item-clickable{cursor:pointer;transition:background .15s}
 .f-item-clickable:hover{background:var(--hover)}
-.f-actions{display:flex;gap:3px;opacity:0;transition:opacity .15s;align-items:center}
-.f-item-clickable:hover .f-actions{opacity:1}
+.f-actions{display:flex;gap:3px;opacity:.7;transition:opacity .15s;align-items:center}
+.f-item-clickable:hover .f-actions{opacity:1}.f-item-clickable:hover{background:rgba(99,102,241,.06);}
 .f-act-btn{background:none;border:1px solid var(--border);border-radius:4px;padding:2px 5px;font-size:11px;cursor:pointer;color:var(--text);line-height:1}
 .f-act-btn:hover{background:var(--border)}
 .f-del{color:#e55;border-color:#e55}
@@ -1035,7 +1035,7 @@ function handleWS(msg){
   }
   else if(msg.type==='domare_start'){
     setProgress(5,'⚖️ Domaren analyserar alla misslyckanden...');
-    addMsg('assistant',`⚖️ Pipelinen misslyckades ${msg.iterations} gånger. **Domaren** analyserar nu alla iterationers rapporter...`);
+    addMsg('assistant',`⚖️ Pipelinen misslyckades ${msg.iterations||'flera'} gånger. Domaren analyserar nu alla iterationers rapporter...`);
     setAgent('domare','running',['Analyserar alla misslyckanden...']);
   }
   else if(msg.type==='inspect_start'){
@@ -1131,10 +1131,12 @@ function handleWS(msg){
       const lvl=prio(f)===0?'high':prio(f)===1?'high':'med';
       const tag=f.category||'kodkvalitet';
       const file=f.file?`<span style="font-size:10px;color:var(--muted);font-family:monospace"> ${f.file}</span>`:'';
+      const safeName=(f.title||'').replace(/'/g,"\\'").replace(/"/g,'&quot;');
       return `<div class="prio-row">
         <div class="prio-num ${lvl}">${i+1}</div>
         <div class="prio-text"><strong>${f.title}</strong>${file}<br><span style="font-size:11px;color:var(--muted)">${f.details||''}</span></div>
         <span class="prio-tag">${tag}</span>
+        <button onclick="triggerReview('${safeName}')" style="background:var(--accent);border:none;border-radius:6px;color:#fff;font-size:10px;font-weight:600;padding:3px 10px;cursor:pointer;white-space:nowrap;flex-shrink:0;margin-left:6px;">→ Bygg</button>
       </div>`;
     }).join('');
     const cardHtml=top.length?`<div class="prio-card">
@@ -1302,8 +1304,7 @@ function _featureBadge(status){
 function _featureActions(name){
   const n=_escQ(name);
   return `<div class="f-actions" onclick="event.stopPropagation()">
-    <button class="f-act-btn" title="Granska" onclick="triggerReview('${n}')">🔍</button>
-    <button class="f-act-btn" title="Bygg" onclick="triggerBuild('${n}')">🔨</button>
+    <button class="f-act-btn" title="Granska med agenter → Bygg" onclick="triggerReview('${n}')" style="font-size:10px;padding:2px 7px;background:rgba(99,102,241,.15);border-color:var(--accent);color:var(--accent);border-radius:5px;border:1px solid;cursor:pointer;font-family:inherit;">Fixa</button>
     <button class="f-act-btn f-del" title="Ta bort" onclick="deleteFeature('${n}')">×</button>
   </div>`;
 }
@@ -1430,16 +1431,17 @@ async function explainBacklog(){
 }
 
 function selectFeatureAction(name, status){
-  // Klick på feature — starta arbete med den
-  document.getElementById('chatInput').value = `Fortsätt med "${name}"`;
-  document.getElementById('chatInput').focus();
-  addMsg('assistant',`Vald feature: <strong>${name}</strong> (${status}). Vad vill du göra med den?`);
-  // Visa snabbknappar
-  showOptions({
-    question: `Vad vill du göra med "${name}"?`,
-    multi: false,
-    options: ['Granska med agenter', 'Bygg kod direkt', 'Ändra spec', 'Ta bort feature']
-  });
+  // Klick på rad — visa direkta åtgärdsknappar i chatten
+  const n=name.replace(/</g,'&lt;');
+  const safe=name.replace(/'/g,"\'");
+  addMsg('assistant',`<div style="padding:4px 0">
+    <div style="font-size:12px;margin-bottom:8px;">Vad vill du göra med <strong>${n}</strong>?</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;">
+      <button onclick="triggerReview('${safe}')" style="background:var(--accent);border:none;border-radius:8px;color:#fff;font-size:12px;font-weight:600;padding:7px 16px;cursor:pointer;">🔍 Granska med agenter</button>
+      <button onclick="triggerBuild('${safe}')" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:12px;padding:7px 16px;cursor:pointer;">🔨 Bygg direkt</button>
+      <button onclick="document.getElementById('chatInput').value='Ändra spec för: ${safe}';document.getElementById('chatInput').focus();" style="background:none;border:1px solid var(--border);border-radius:8px;color:var(--muted);font-size:12px;padding:7px 16px;cursor:pointer;">✏️ Ändra spec</button>
+    </div>
+  </div>`, true);
 }
 
 async function triggerReview(featureName){
@@ -2422,7 +2424,13 @@ async function loadArch(){
   }catch(e){}
 }
 async function _getActiveProj(){
-  try{const r=await fetch(`${API}/api/projects`);const d=await r.json();return d.active||null;}catch{return null;}
+  try{
+    const r=await fetch(`${API}/api/projects`);
+    const d=await r.json();
+    const activeId=d.active;
+    if(!activeId)return null;
+    return (d.projects||[]).find(p=>p.id===activeId)||null;
+  }catch{return null;}
 }
 async function generateArch(){
   const proj=await _getActiveProj();if(!proj){alert('Inget aktivt projekt.');return;}

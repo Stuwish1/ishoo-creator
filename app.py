@@ -733,14 +733,24 @@ async def build_code(spec: dict, pid: str) -> tuple[list, str]:
             code = cm.group(1).lstrip("\n") if cm else ""
             if p2: files.append({"path":p2,"action":act,"content":code,"description":desc})
         if not files:
-            # Fallback: JSON om Claude missade instruktionen
+            # Fallback 1: JSON-block
             try:
                 s2, e2 = text.find("{"), text.rfind("}")+1
-                d2 = json.loads(text[s2:e2]) if s2!=-1 else {}
-                files = d2.get("files",[])
-                summary = d2.get("summary", summary)
+                if s2 != -1:
+                    d2 = json.loads(text[s2:e2])
+                    files = d2.get("files",[])
+                    summary = d2.get("summary", summary)
             except Exception:
                 pass
+        if not files:
+            # Fallback 2: Direkt kod i svaret
+            if any(kw in text for kw in ["def ", "class ", "import ", "function ", "const ", "async "]):
+                main_file = "app.py"
+                if spec:
+                    comps = spec.get("filer_att_andra", spec.get("komponenter", []))
+                    if comps:
+                        main_file = str(comps[0]).split(":")[0].strip()
+                files.append({"path": main_file, "action": "modify", "content": text[:12000], "description": "Extraherad"})
         if not files:
             return [], f"Snickaren returnerade ogiltigt format. ({len(text)} tecken)"
         return files, summary
@@ -932,47 +942,19 @@ _review_cache: dict = {}
 
 # ─── Domare — aktiveras efter max_iter misslyckanden ─────────────────────────
 
-DOMARE_PROMPT = """Du är Domaren — kontinuerlig prioriterare. Du aktiveras när en granskning misslyckas.
+DOMARE_PROMPT = """Du är Domaren. En feature-granskning misslyckades. Analysera SNABBT varför och bryt ner i minimala deluppgifter.
 
-DITT JOBB I EXAKT DENNA ORDNING:
-
-STEG 1 — Kategorisera blockerarna:
-Dela in alla agentfynd i:
-  A) MÅSTE FIXAS FÖRST (blockerar allt annat — spec oklart, kritisk infrastruktur saknas)
-  B) MÅSTE FIXAS (HIGH-problem som stoppar bygget)
-  C) BÖR FIXAS (MEDIUM-problem som påverkar kvalitet men inte stoppar)
-  D) KAN VÄNTA (LOW-problem, teknisk skuld)
-
-STEG 2 — Bryt ner i MINIMALA BYGGBARA DELUPPGIFTER:
-Varje deluppgift ska vara så liten att den:
-  - Kan granskas och byggas på under 30 minuter
-  - Löser EXAKT EN blockerare
-  - Kan testas självständigt
-Skapa 2-5 deluppgifter MAX. Om fler behövs, prioritera de viktigaste.
-
-STEG 3 — Sätt HÅRD BEROENDEORDNING:
-Om deluppgift B beror på deluppgift A → sätt beroende_av: ["A"].
-Ingen deluppgift ska byggas om dess beroenden inte är GODKÄNDA och BYGGDA.
-
-STEG 4 — Tydliggör vem som behöver agera:
-  - "Användaren" = beslut/konfiguration som kräver mänskligt ingripande
-  - "Snickaren" = ren kodändring som AI kan göra
-  - "Projektledaren + Användaren" = diskussion krävs
-
-FORMAT — returnera ENBART JSON:
-{{
-  "blockerare": [
-    {{"problem": "...", "kategori": "A"/"B"/"C"/"D", "berorda_agenter": ["..."], "rekommendation": "..."}}
-  ],
-  "grundorsak": "Spec för vag / Teknisk skuld / Saknat beroende / Säkerhetsrisk / Infrastruktur saknas",
+Returnera ENBART JSON — inga kommentarer, inget annat:
+{
+  "grundorsak": "En mening",
+  "blockerare": [{"problem": "...", "kategori": "A"/"B", "berorda_agenter": ["..."]}],
   "deluppgifter": [
-    {{"prioritet": 1, "namn": "Kort unikt namn", "spec": "Exakt vad som ska implementeras — tillräckligt detaljerat för Snickaren att bygga direkt", "vem": "Snickaren"/"Användaren", "beroende_av": [], "beraknad_tid": "15min"}},
-    {{"prioritet": 2, "namn": "...", "spec": "...", "vem": "...", "beroende_av": ["Prioritet 1 namn"], "beraknad_tid": "..."}}
+    {"prioritet": 1, "namn": "Kort namn", "spec": "Exakt vad som ska göras", "vem": "Snickaren"/"Användaren", "beroende_av": [], "beraknad_tid": "15min"}
   ],
-  "nasta_steg": "Exakt vad användaren ska göra NU — ett konkret nästa steg",
-  "projektledare_sammanfattning": "Kortfattad text på svenska — max 3 meningar",
+  "nasta_steg": "Exakt ett konkret nästa steg",
+  "projektledare_sammanfattning": "Max 2 meningar på svenska",
   "kan_byggas_nu": false
-}}"""
+}"""
 
 # ─── Post-build agenter (kör automatiskt efter varje bygge) ──────────────────
 # Varje agent har ett ENDA ansvar — inga överlapp.
@@ -1165,7 +1147,7 @@ def run_agent(agent_def: dict, spec: str, memory: str, feedback: str = "", s: di
     ctx_limit = 35000 if model_key in ("sonnet", "opus") else 20000
     code_block = f"\n\nKODBAS (aktuell):\n{code_context[:ctx_limit]}" if code_context else ""
     is_domare = agent_def.get("id") == "domare"
-    max_tokens = 3000 if is_domare else 1500
+    max_tokens = 1200 if is_domare else 1500
     try:
         r = client_inst.messages.create(model=model_name, max_tokens=max_tokens,
             system=agent_def["prompt"],
@@ -1679,26 +1661,25 @@ async def review_feature(payload: dict):
                              "backlog_added": backlog_added})
 
     # ── Steg 4: Avvisat → Domaren analyserar direkt ──────────────────────────
-    await manager.broadcast({"type": "domare_start", "feature": feature_name})
+    await manager.broadcast({"type": "domare_start", "feature": feature_name, "iterations": max_iterations})
 
     rejected = [r for r in results if r.get("status") not in ("GODKAND","GODKÄND")]
-    domare_sections = ["## AGENT-FYND"]
-    for r in results:
-        st = r.get("status","?"); sev = r.get("severity","LOW")
-        finds = "; ".join(r.get("findings",[])) or "Inga fynd"
-        domare_sections.append(f"  {r.get('agent','?')} [{st}][{sev}]: {finds}")
-
+    # Mata bara avvisade agenter — kortare = snabbare
+    fail_lines = []
+    for r in rejected:
+        sev = r.get("severity","LOW")
+        finds = "; ".join((r.get("findings") or [])[:3]) or "Inga fynd"
+        fail_lines.append(f"  {r.get('agent','?')} [{sev}]: {finds}")
     domare_input = (
-        f"FEATURE: {feature_name}\n\nSPEC:\n{spec_str[:1500]}\n\n"
-        + "\n".join(domare_sections)
+        f"FEATURE: {feature_name}\nSPEC (kort): {spec_str[:600]}\n\nMISSLYCKADE AGENTER:\n"
+        + "\n".join(fail_lines)
     )
-    domare_agent = {"id":"domare","name":"Domaren","emoji":"⚖️","model":"sonnet",
-                    "prompt": DOMARE_PROMPT.format(max_iter=1)}
+    domare_agent = {"id":"domare","name":"Domaren","emoji":"⚖️","model":"haiku","prompt": DOMARE_PROMPT}
 
     await manager.broadcast({"type": "agent_status", "id": "domare",
         "name": "⚖️ Domaren", "status": "running"})
     domare_result = await loop.run_in_executor(
-        None, run_agent, domare_agent, domare_input, memory, "", s, code_ctx_claude)
+        None, run_agent, domare_agent, domare_input, "", "", s, "")
 
     pl_summary = domare_result.get("projektledare_sammanfattning", "Granskningen misslyckades.")
     blockerare = domare_result.get("blockerare", [])

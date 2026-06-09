@@ -16,7 +16,7 @@
     "id": 2,
     "name": "Clipboard Image Input: Fixa duplicerad git_push_direct endpoint",
     "phase": "MVP",
-    "status": "Granskas",
+    "status": "Blockerad",
     "parent_feature": "Clipboard Image Input",
     "spec": {
       "name": "Clipboard Image Input: Fixa duplicerad git_push_direct endpoint",
@@ -269,5 +269,81 @@
     "description": "Features id 6–10 använder ett odokumenterat fält 'källa' i spec-objektet (värden: 'Säkerhetsansvarig', 'Arkitekt', 'Felhanteringsgranskaren'). SCHEMA.md dokumenterar inte detta fält, vilket gör det osynligt för agenter som genererar nya features och leder till inkonsistent datakvalitet. [Fil: SCHEMA.md]",
     "source": "kod-iterator",
     "iteration": 1
+  },
+  {
+    "name": "Konsolidera duplicerade uppgifter om git_push_direct-endpoint",
+    "status": "Planerad",
+    "phase": "Arkitektur",
+    "priority_tag": "KRITISKT",
+    "description": "Features 2, 6, 7 och 11 beskriver EXAKT samma problem (duplicerad git_push_direct-endpoint) men existerar som separata uppgifter med olika parent_feature och olika rad-nummer (2445, 2509, 2534, 2603, 2631). Detta skapar förvirring om vilka rader som faktiskt ska tas bort — deduplika till EN uppgift med kanoniska radnummer. [Fil: features.json]",
+    "source": "kod-iterator",
+    "iteration": 1
+  },
+  {
+    "name": "Säkerhetsuppgift saknar åtgärdssteg: GitHub-token i klartext i subprocess-URL",
+    "status": "Planerad",
+    "phase": "Säkerhet",
+    "priority_tag": "KRITISKT",
+    "description": "Features 9 och 10 identifierar att GitHub-token exponeras i remote-URL (https://{token}@github.com/...) men spec saknar konkret åtgärdsplan — byt till git credential helper eller GIT_ASKPASS-miljövariabel, rensa befintlig remote-URL i repo-historiken och verifiera att token inte läckt i git reflog. [Fil: features.json]",
+    "source": "kod-iterator",
+    "iteration": 1
+  },
+  {
+    "name": "Feature 8 (RLS i Supabase) saknar fullständig spec",
+    "status": "Planerad",
+    "phase": "Säkerhet",
+    "priority_tag": "KRITISKT",
+    "description": "Uppgiften 'Saknad rättigheter kontroll (RLS) i Supabase' har description identisk med name — ingen information om vilka tabeller som saknar RLS-policies, vilket API-endpoint som exponerar data utan autentisering, eller vilket SQL som ska köras. Spec måste kompletteras med konkreta tabellnamn och policy-definitioner. [Fil: features.json]",
+    "source": "kod-iterator",
+    "iteration": 1
+  },
+  {
+    "name": "Feature-namn trunkeras och förlorar information",
+    "status": "Planerad",
+    "phase": "Förbättring",
+    "priority_tag": "Normal",
+    "description": "Feature 7 har name som slutar med 'definier' (avklippt) och feature 9/10 har namn som slutar med 'remo'/'git' — JSON-strukturen tillåter långa strängar men något trunkerar vid generering. Inför en maxlängd-validering vid skapande av feature-namn (t.ex. 120 tecken) och generera i stället ett kort kanoniskt ID-baserat namn. [Fil: features.json]",
+    "source": "kod-iterator",
+    "iteration": 1
+  },
+  {
+    "name": "Datum 2026 i created-fält är ogiltigt",
+    "status": "Planerad",
+    "phase": "Bug",
+    "priority_tag": "Normal",
+    "description": "Features 6–11 har created-datum '2026-06-09T...' vilket är ett år in i framtiden och sannolikt ett systemklocke-fel eller copy-paste-misstag. Lägg till serversidig validering att created-timestamp inte kan vara i framtiden vid POST /api/features, och korrigera befintliga poster. [Fil: features.json]",
+    "source": "kod-iterator",
+    "iteration": 1
+  },
+  {
+    "name": "parent_feature refererar med fullt namn-sträng istället för ID",
+    "status": "Planerad",
+    "phase": "Arkitektur",
+    "priority_tag": "Normal",
+    "description": "parent_feature lagras som fri textsträng (t.ex. 'Clipboard Image Input: Fixa duplicerad git_push_direct endpoint') vilket gör att namnbyten bryter relationer och sökning kräver exakt strängjämförelse. Byt till parent_feature_id: number | null i schema och uppdatera SCHEMA.md, load_features() och save_features() i app.py. [Fil: features.json]",
+    "source": "kod-iterator",
+    "iteration": 1
+  },
+  {
+    "name": "project_settings.json innehåller tomma Supabase-nycklar utan fallback-hantering",
+    "status": "Planerad",
+    "phase": "Säkerhet",
+    "priority_tag": "Önskelista",
+    "description": "project_settings.json har supabase_dev_key och supabase_prod_key som tomma strängar — om backend använder dessa utan null-check riskerar man att skicka autentiserade API-anrop utan token och få missvisande 401/403-fel. Lägg till validering i onboard-endpoint att varna om nycklar saknas, och dokumentera i SCHEMA.md att filen inte ska committas (liksom settings.json). [Fil: project_settings.json]",
+    "source": "kod-iterator",
+    "iteration": 1
+  },
+  {
+    "id": 29,
+    "name": "Clipboard Image Input: Fixa duplicerad git_push_direct endpoint: Ta bort duplicerad git_push_direct",
+    "phase": "MVP",
+    "status": "Planerad",
+    "parent_feature": "Clipboard Image Input: Fixa duplicerad git_push_direct endpoint",
+    "spec": {
+      "name": "Clipboard Image Input: Fixa duplicerad git_push_direct endpoint: Ta bort duplicerad git_push_direct",
+      "description": "Öppna app.py med Python direct write (läs hela filen som sträng). Leta upp de två förekomsterna av '@app.post' + 'async def git_push_direct'. Det FÖRSTA blocket börjar på rad ~2667 och slutar precis innan det andra blocket börjar på rad ~2703. Ta bort det första blocket inklusive dekoratorn (@app.post(...)) och hela funktionskroppen fram till (men inte inklusive) det andra blockets @app.post-dekorator. Skriv tillbaka filen. Verifiera med grep/search att exakt EN definition av 'async def git_push_direct' kvarstår.",
+      "beroende_av": []
+    },
+    "created": "2026-06-09T11:44:02.923623"
   }
 ]
