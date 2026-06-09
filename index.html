@@ -831,13 +831,19 @@ function handleWS(msg){
     } else if(msg.projektledare_message){
       // Domaren har analyserat — Projektledaren presenterar rapporten
       setProgress(0,'⚖️ Domaren har analyserat');
-      // Spara rapporten globalt så användaren kan komma åt den
       window._lastDomarReport = msg.domare_report || {};
       window._lastDomarFeature = msg.feature;
-      // Bygg meddelande med expanderbar rapport + diskutera-knapp
       const reportJson = JSON.stringify(msg.domare_report || {}, null, 2);
+      const subs = msg.added_subtasks || [];
+      const subsHtml = subs.length
+        ? `<div style="margin-top:8px;padding:8px;background:var(--surface);border-radius:6px;border:1px solid var(--border)">
+            <div style="font-size:11px;font-weight:600;margin-bottom:4px">📋 ${subs.length} deluppgifter skapade:</div>
+            ${subs.map((s,i)=>`<div style="font-size:11px;padding:2px 0;color:var(--muted)">${i+1}. ${s.split(': ').slice(1).join(': ')||s}</div>`).join('')}
+           </div>`
+        : '';
       const msgHtml = `
         <div>${(msg.projektledare_message||'').replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>').replace(/\n/g,'<br>')}</div>
+        ${subsHtml}
         <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
           <button onclick="toggleDomarDetail(this)" style="background:var(--border);border:none;border-radius:6px;padding:5px 10px;font-size:11px;cursor:pointer;color:var(--text)">📋 Visa full rapport</button>
           <button onclick="diskuteraDomare()" style="background:var(--accent);border:none;border-radius:6px;padding:5px 10px;font-size:11px;cursor:pointer;color:#fff">💬 Diskutera med AI</button>
@@ -1006,23 +1012,90 @@ function setPhase(ph,btn){
   btn.classList.add('active');loadFeatures();
 }
 
+function _escQ(s){ return s.replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
+
+function _featureBadge(status){
+  const s=(status||'Planerad').toLowerCase().replace(/\s/g,'-');
+  return `<span class="f-badge fb-${s}">${status||'Planerad'}</span>`;
+}
+
+function _featureActions(name){
+  const n=_escQ(name);
+  return `<div class="f-actions" onclick="event.stopPropagation()">
+    <button class="f-act-btn" title="Granska" onclick="triggerReview('${n}')">🔍</button>
+    <button class="f-act-btn" title="Bygg" onclick="triggerBuild('${n}')">🔨</button>
+    <button class="f-act-btn f-del" title="Ta bort" onclick="deleteFeature('${n}')">×</button>
+  </div>`;
+}
+
+function renderFeatureRow(f, subCount, subDone){
+  const n=_escQ(f.name);
+  const progress = subCount>0
+    ? `<span style="font-size:10px;color:var(--muted);margin-left:6px">${subDone}/${subCount} klara</span>`
+    : '';
+  const blocked = f.status==='Blockerad'
+    ? `<span style="font-size:10px;color:#e55;margin-left:4px">⛔ blockerad</span>`
+    : '';
+  return `<div class="f-item f-item-clickable" onclick="selectFeatureAction('${n}','${f.status||'Planerad'}')">
+    <div style="flex:1;min-width:0;">
+      <div class="f-name">${f.name}${blocked}${progress}</div>
+      <span class="f-phase">${f.phase||'MVP'}</span>
+    </div>
+    ${_featureBadge(f.status)}
+    ${_featureActions(f.name)}
+  </div>`;
+}
+
+function renderSubtaskRow(f){
+  const n=_escQ(f.name);
+  const displayName = f.name.includes(': ') ? f.name.split(': ').slice(1).join(': ') : f.name;
+  const deps = (f.spec?.beroende_av||[]).length>0
+    ? `<span style="font-size:9px;color:var(--muted)">⛓ ${f.spec.beroende_av.map(d=>d.split(': ').pop()).join(', ')}</span>`
+    : '';
+  return `<div class="f-item f-item-clickable" style="padding-left:22px;border-left:2px solid var(--border);margin-left:10px;opacity:0.92"
+    onclick="selectFeatureAction('${n}','${f.status||'Planerad'}')">
+    <div style="flex:1;min-width:0;">
+      <div class="f-name" style="font-size:12px">↳ ${displayName}</div>
+      ${deps}
+    </div>
+    ${_featureBadge(f.status)}
+    ${_featureActions(f.name)}
+  </div>`;
+}
+
 async function loadFeatures(){
-  try{const r=await fetch(`${API}/api/features`);const data=await r.json();
+  try{
+    const r=await fetch(`${API}/api/features`);
+    const data=await r.json();
     const filtered=phaseFilter==='all'?data:data.filter(f=>f.phase===phaseFilter);
-    document.getElementById('featureList').innerHTML=filtered.length?filtered.map(f=>`
-      <div class="f-item f-item-clickable" onclick="selectFeatureAction('${f.name.replace(/'/g,"\\'")}','${f.status||'Planerad'}')">
-        <div style="flex:1;min-width:0;">
-          <div class="f-name">${f.name}</div>
-          <span class="f-phase">${f.phase||'MVP'}</span>
-        </div>
-        <span class="f-badge fb-${(f.status||'planerad').toLowerCase().replace(/\s/g,'-')}">${f.status||'Planerad'}</span>
-        <div class="f-actions" onclick="event.stopPropagation()">
-          <button class="f-act-btn" title="Granska" onclick="triggerReview('${f.name.replace(/'/g,"\\'")}')">🔍</button>
-          <button class="f-act-btn" title="Bygg" onclick="triggerBuild('${f.name.replace(/'/g,"\\'")}')">🔨</button>
-          <button class="f-act-btn f-del" title="Ta bort" onclick="deleteFeature('${f.name.replace(/'/g,"\\'")}')">×</button>
-        </div>
-      </div>`).join(''):'<div style="padding:10px 12px;font-size:12px;color:var(--muted)">Inga features ännu.</div>';
-    renderPhaseProgress(data);
+
+    // Separera top-level och deluppgifter
+    const parents=filtered.filter(f=>!f.parent_feature);
+    const children=filtered.filter(f=>f.parent_feature);
+
+    // Bygg childMap: parent_name -> [children sorterade på prioritet/created]
+    const childMap={};
+    children.forEach(c=>{
+      if(!childMap[c.parent_feature])childMap[c.parent_feature]=[];
+      childMap[c.parent_feature].push(c);
+    });
+
+    const rows=[];
+    parents.forEach(f=>{
+      const subs=childMap[f.name]||[];
+      const subDone=subs.filter(s=>s.status==='Klar'||s.status==='I dev').length;
+      rows.push(renderFeatureRow(f, subs.length, subDone));
+      subs.forEach(s=>rows.push(renderSubtaskRow(s)));
+    });
+    // Barn vars förälder inte längre finns
+    children.filter(c=>!parents.find(p=>p.name===c.parent_feature)).forEach(c=>{
+      rows.push(renderSubtaskRow(c));
+    });
+
+    document.getElementById('featureList').innerHTML=rows.length
+      ? rows.join('')
+      : '<div style="padding:10px 12px;font-size:12px;color:var(--muted)">Inga features ännu.</div>';
+    renderPhaseProgress(data.filter(f=>!f.parent_feature));
   }catch{}
 }
 
@@ -1733,6 +1806,11 @@ async function saveAgent(id){
   loadSettingsData();
 }
 
+
+function addNewAgent(){
+  document.getElementById('newAgentForm').style.display='block';
+  document.getElementById('na-name').focus();
+}
 
 async function saveNewAgent(){
   const name=document.getElementById('na-name').value.trim();if(!name)return;

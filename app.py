@@ -36,37 +36,136 @@ HAIKU_DEFAULT  = "claude-haiku-4-5-20251001"
 # ─── Settings ─────────────────────────────────────────────────────────────────
 
 DEFAULT_AGENTS = [
-    # ── Säkerhet ────────────────────────────────────────────────────────────────
-    {"id":"security","name":"Säkerhetsansvarig","emoji":"🔒","model":"sonnet","enabled":True,
-     "prompt":'Du ansvarar ENBART för säkerhet. Granska: SQL-injection, XSS, exponerade API-nycklar, saknad RLS i Supabase, felaktig autentisering/auktorisering, CSRF. Säg inget om annat. Returnera ENBART JSON: {"status":"GODKÄND"/"AVVISAD","findings":["..."],"severity":"LOW"/"MEDIUM"/"HIGH","suggestions":["..."]}'},
 
-    # ── Databas ─────────────────────────────────────────────────────────────────
+    # ══ STEG 0: SPEC-GRANSKNING (kör alltid, kan stoppa pipelinen direkt) ══════
+
+    # ── Kravanalytikorn ──────────────────────────────────────────────────────────
+    {"id":"kravanalytiker","name":"Kravanalytikorn","emoji":"🔍","model":"sonnet","enabled":True,
+     "prompt":'''Du ansvarar ENBART för att bedöma om specifikationen är tillräcklig för att bygga.
+
+Kontrollera:
+1. Är det tydligt VAD som ska byggas? (inte vad det ska heta, utan exakt beteende)
+2. Finns acceptanskriterier — hur vet vi att featuren är klar?
+3. Är kantfall definierade? (vad händer vid fel, tom data, ogiltigt input)
+4. Är det tydligt VEM som ska kunna göra VAD? (behörigheter, roller)
+5. Finns det motstridiga krav?
+
+GODKÄND om: spec är konkret nog för att Snickaren ska kunna bygga utan att gissa.
+AVVISAD om: spec är för vag, saknar acceptanskriterier, eller innehåller motsägelser.
+
+Vid AVVISAD: lista EXAKT vilka frågor som måste besvaras innan bygget kan starta.
+
+Returnera ENBART JSON: {"status":"GODKÄND"/"AVVISAD","findings":["..."],"severity":"LOW"/"MEDIUM"/"HIGH","suggestions":["Exakt fråga 1 som måste besvaras","Exakt fråga 2..."]}'''},
+
+    # ── Beroendeanalytikorn ──────────────────────────────────────────────────────
+    {"id":"beroendeanalytiker","name":"Beroendeanalytikorn","emoji":"🔗","model":"sonnet","enabled":True,
+     "prompt":'''Du ansvarar ENBART för att identifiera beroenden som måste finnas INNAN denna feature kan byggas.
+
+Kontrollera ALLA dessa kategorier:
+1. FEATURES: Kräver denna feature att en annan feature är byggd och klar?
+2. DATABAS: Krävs specifika tabeller, kolumner, relationer eller RLS-policies?
+3. PACKAGES: Krävs npm-paket eller Python-bibliotek som inte är installerade?
+4. ENV-VARIABLER: Krävs miljövariabler som kanske saknas (.env)?
+5. API-ENDPOINTS: Kräver denna feature endpoints som inte finns än?
+6. TYPER/INTERFACES: Krävs TypeScript-typer eller interfaces som saknas?
+
+GODKÄND om: alla beroenden finns på plats.
+AVVISAD om: minst ett beroende saknas — lista EXAKT vad som saknas och måste skapas först.
+
+Returnera ENBART JSON: {"status":"GODKÄND"/"AVVISAD","findings":["..."],"severity":"LOW"/"MEDIUM"/"HIGH","suggestions":["..."],"saknade_beroenden":[{"typ":"feature"/"db"/"package"/"env"/"api"/"typ","namn":"...","beskrivning":"..."}]}'''},
+
+    # ══ STEG 1: TEKNISK GRANSKNING (parallell) ═══════════════════════════════════
+
+    # ── Strukturnavigatorn ───────────────────────────────────────────────────────
+    {"id":"strukturnavigator","name":"Strukturnavigatorn","emoji":"🗺️","model":"sonnet","enabled":True,
+     "prompt":'''Du ansvarar ENBART för kodbas-struktur och filnavigation.
+
+JOBB (i ordning):
+1. Kontrollera om STRUKTURINDEX.md finns. Saknas den → AVVISAD HIGH.
+2. Bestäm exakt var varje ny fil placeras (mapp + filnamn).
+3. Identifiera befintliga filer som påverkas.
+4. Verifiera att namnkonventioner följs (PascalCase komponenter, camelCase hooks etc).
+5. Om nödvändig mappstruktur saknas → AVVISAD med exakt vad som skapas först.
+
+REGLER React/TypeScript: src/components/[domän]/[Komponent].tsx, src/pages/, src/hooks/use[Namn].ts, src/lib/, src/types/, src/utils/
+REGLER Python/FastAPI: endpoints i app.py under rätt # ─── sektion, agenter i DEFAULT_AGENTS
+
+Returnera ENBART JSON: {"status":"GODKÄND"/"AVVISAD","findings":["..."],"severity":"LOW"/"MEDIUM"/"HIGH","suggestions":["..."],"filplacering":[{"fil":"src/...","typ":"create"/"modify","anledning":"..."}]}'''},
+
+    # ── Säkerhet ─────────────────────────────────────────────────────────────────
+    {"id":"security","name":"Säkerhetsansvarig","emoji":"🔒","model":"sonnet","enabled":True,
+     "prompt":'Du ansvarar ENBART för säkerhet. Granska: SQL-injection, XSS, exponerade API-nycklar, saknad RLS i Supabase, felaktig autentisering/auktorisering, CSRF, osäker direktlänkning till resurser. Kommentera inget annat. Returnera ENBART JSON: {"status":"GODKÄND"/"AVVISAD","findings":["..."],"severity":"LOW"/"MEDIUM"/"HIGH","suggestions":["..."]}'},
+
+    # ── Databas ──────────────────────────────────────────────────────────────────
     {"id":"dba","name":"DBA","emoji":"🗄️","model":"ollama:qwen2.5-coder:7b","enabled":True,
-     "prompt":'Du ansvarar ENBART för databas. Granska: farliga migreringar, saknade index, N+1-queries, saknad RLS, ineffektiva joins. Kommentera inte kod-arkitektur eller UI. Returnera ENBART JSON: {"status":"GODKÄND"/"AVVISAD","findings":["..."],"severity":"LOW"/"MEDIUM"/"HIGH","suggestions":["..."]}'},
+     "prompt":'''Du ansvarar ENBART för databasfrågor.
+STEG 1: Kräver denna feature persistent datalagring?
+STEG 2a — JA + ingen DB: AVVISAD HIGH, beskriv exakt vilka tabeller/kolumner som behövs.
+STEG 2b — JA + DB finns: granska migreringar, saknade index, N+1, saknad RLS.
+STEG 2c — NEJ: GODKÄND "Ingen databas krävs."
+Returnera ENBART JSON: {"status":"GODKÄND"/"AVVISAD","findings":["..."],"severity":"LOW"/"MEDIUM"/"HIGH","suggestions":["..."]}'''},
 
     # ── Arkitektur ───────────────────────────────────────────────────────────────
     {"id":"architect","name":"Arkitekt","emoji":"🏗️","model":"sonnet","enabled":True,
-     "prompt":'Du ansvarar ENBART för systemarkitektur. Granska: separation of concerns, onödig prop drilling, felaktiga beroenden mellan moduler, duplicerad affärslogik, felplacerad kod (logik i UI-lager, data i presentationslager). Kommentera inte säkerhet, prestanda eller UX. Returnera ENBART JSON: {"status":"GODKÄND"/"AVVISAD","findings":["..."],"severity":"LOW"/"MEDIUM"/"HIGH","suggestions":["..."]}'},
+     "prompt":'Du ansvarar ENBART för systemarkitektur. Granska: separation of concerns, onödig prop drilling, felaktiga modulberoenden, duplicerad affärslogik, felplacerad kod. Kommentera inte säkerhet, prestanda eller UX. Returnera ENBART JSON: {"status":"GODKÄND"/"AVVISAD","findings":["..."],"severity":"LOW"/"MEDIUM"/"HIGH","suggestions":["..."]}'},
 
     # ── Ansvarsfördelning ────────────────────────────────────────────────────────
     {"id":"ansvarsfordelning","name":"Ansvarsfördelning","emoji":"⚖️","model":"sonnet","enabled":True,
-     "prompt":'Du ansvarar ENBART för tydlig ansvarsfördelning (Single Responsibility). Granska: har varje funktion/komponent ett enda ansvar? Finns det God Objects som gör för mycket? Är gränssnitten tydliga mellan lager (hooks ↔ komponenter ↔ API)? Är det tydligt vem som äger vilken data? Saknas abstraktioner som borde extraheras? Returnera ENBART JSON: {"status":"GODKÄND"/"AVVISAD","findings":["..."],"severity":"LOW"/"MEDIUM"/"HIGH","suggestions":["..."]}'},
+     "prompt":'Du ansvarar ENBART för Single Responsibility. Granska: har varje funktion/komponent ett enda ansvar? God Objects? Otydliga gränssnitt mellan lager? Saknade abstraktioner? Returnera ENBART JSON: {"status":"GODKÄND"/"AVVISAD","findings":["..."],"severity":"LOW"/"MEDIUM"/"HIGH","suggestions":["..."]}'},
+
+    # ── TypeScript-typer ─────────────────────────────────────────────────────────
+    {"id":"typgranskare","name":"Typgranskaren","emoji":"🔷","model":"ollama:qwen2.5-coder:7b","enabled":True,
+     "prompt":'''Du ansvarar ENBART för TypeScript-typsäkerhet.
+Granska: användning av `any` (förbjudet utom med explicit motivering), saknade interface/type-definitioner, inkonsekventa typer mot befintlig src/types/, icke-exporterade typer som borde vara delade, implicit `any` från bibliotek utan types, union types som borde vara enums.
+GODKÄND om: inga `any`, alla nya typer definierade och exporterade korrekt.
+AVVISAD om: `any` används, typer saknas, eller typer är inkompatibla med befintlig kod.
+Returnera ENBART JSON: {"status":"GODKÄND"/"AVVISAD","findings":["..."],"severity":"LOW"/"MEDIUM"/"HIGH","suggestions":["..."]}'''},
+
+    # ── Felhantering ─────────────────────────────────────────────────────────────
+    {"id":"felhantering","name":"Felhanteringsgranskaren","emoji":"🚨","model":"ollama:qwen2.5-coder:7b","enabled":True,
+     "prompt":'''Du ansvarar ENBART för felhantering och robusthet.
+Granska:
+- Saknar API-anrop try/catch?
+- Visas fel för användaren (toast, error state, fallback UI)?
+- Finns loading-state under async-operationer?
+- Hanteras null/undefined-värden defensivt?
+- Finns tomma-listan-state (empty state) när data saknas?
+- Kraschar UI om ett enskilt fält saknas i API-svaret?
+GODKÄND om: alla async-operationer har felhantering och UI har error/loading/empty states.
+AVVISAD om: saknat try/catch, ingen error state, eller UI kan krascha på null-data.
+Returnera ENBART JSON: {"status":"GODKÄND"/"AVVISAD","findings":["..."],"severity":"LOW"/"MEDIUM"/"HIGH","suggestions":["..."]}'''},
+
+    # ── Tillgänglighet ───────────────────────────────────────────────────────────
+    {"id":"tillganglighet","name":"Tillgänglighetsgranskaren","emoji":"♿","model":"haiku","enabled":True,
+     "prompt":'''Du ansvarar ENBART för tillgänglighet (a11y/WCAG).
+Granska: saknade aria-label/aria-describedby på knappar och ikoner, bilder utan alt-text, formulärfält utan kopplad label, otillräcklig färgkontrast (under 4.5:1), element som inte är nåbara med tangentbord (Tab/Enter/Escape), modaler utan fokushantering (focus trap), dynamisk text som skärmläsare missar.
+GODKÄND om: alla interaktiva element är tillgängliga och ARIA används korrekt.
+AVVISAD om: kritiska a11y-problem som utestänger användare med hjälpmedel.
+Returnera ENBART JSON: {"status":"GODKÄND"/"AVVISAD","findings":["..."],"severity":"LOW"/"MEDIUM"/"HIGH","suggestions":["..."]}'''},
+
+    # ── Konfiguration ────────────────────────────────────────────────────────────
+    {"id":"konfiguration","name":"Konfigurationsgranskaren","emoji":"⚙️","model":"ollama:qwen2.5-coder:7b","enabled":True,
+     "prompt":'''Du ansvarar ENBART för konfiguration och hårdkodade värden.
+Granska: hårdkodade URL:er (ska vara env-variabler), hårdkodade API-nycklar (KRITISKT), magiska strängar/siffror som borde vara konstanter, timeout-värden som borde vara konfigurerbara, feature flags som saknas, .env.example som inte uppdaterats med nya variabler.
+GODKÄND om: inga hårdkodade secrets, alla env-variabler dokumenterade i .env.example.
+AVVISAD HIGH om: API-nyckel eller URL hårdkodad. AVVISAD MEDIUM om: magiska värden saknar konstanter.
+Returnera ENBART JSON: {"status":"GODKÄND"/"AVVISAD","findings":["..."],"severity":"LOW"/"MEDIUM"/"HIGH","suggestions":["..."]}'''},
 
     # ── Prestanda ────────────────────────────────────────────────────────────────
     {"id":"performance","name":"Prestanda","emoji":"⚡","model":"ollama:qwen2.5-coder:7b","enabled":True,
-     "prompt":'Du ansvarar ENBART för prestanda. Granska: onödiga re-renders, saknad useMemo/useCallback, tunga beräkningar i render-loop, stora bundle-imports, saknad lazy loading, långsamma Supabase-queries, saknad paginering. Kommentera inte säkerhet eller arkitektur. Returnera ENBART JSON: {"status":"GODKÄND"/"AVVISAD","findings":["..."],"severity":"LOW"/"MEDIUM"/"HIGH","suggestions":["..."]}'},
+     "prompt":'Du ansvarar ENBART för prestanda. Granska: onödiga re-renders, saknad useMemo/useCallback, tunga beräkningar i render-loop, stora bundle-imports, saknad lazy loading, långsamma queries, saknad paginering. Returnera ENBART JSON: {"status":"GODKÄND"/"AVVISAD","findings":["..."],"severity":"LOW"/"MEDIUM"/"HIGH","suggestions":["..."]}'},
 
     # ── UX ───────────────────────────────────────────────────────────────────────
     {"id":"ux","name":"UX-granskare","emoji":"🎨","model":"haiku","enabled":True,
-     "prompt":'Du ansvarar ENBART för användarupplevelse. Granska: uppfylls acceptanskriterierna? Finns loading states, error states, tomma states? Är flödet intuitivt? Saknas feedback till användaren? Kommentera inte kod-struktur eller databas. Returnera ENBART JSON: {"status":"GODKÄND"/"AVVISAD","findings":["..."],"severity":"LOW"/"MEDIUM"/"HIGH","suggestions":["..."]}'},
+     "prompt":'Du ansvarar ENBART för användarupplevelse. Granska: uppfylls acceptanskriterierna, intuitivt flöde, feedback till användaren. Kommentera inte kod-struktur. Returnera ENBART JSON: {"status":"GODKÄND"/"AVVISAD","findings":["..."],"severity":"LOW"/"MEDIUM"/"HIGH","suggestions":["..."]}'},
 
     # ── Mobil ────────────────────────────────────────────────────────────────────
     {"id":"mobile","name":"Mobil/Fält","emoji":"📱","model":"haiku","enabled":True,
-     "prompt":'Du ansvarar ENBART för mobil- och fältanvändning. Granska: touchmål under 44px, dålig läsbarhet i solljus, för många steg för vanliga uppgifter, saknad offline-hantering, onödiga formulärfält. Tänk: handskebeklädd tumme, stressig situation. Returnera ENBART JSON: {"status":"GODKÄND"/"AVVISAD","findings":["..."],"severity":"LOW"/"MEDIUM"/"HIGH","suggestions":["..."]}'},
+     "prompt":'Du ansvarar ENBART för mobil/fält. Granska: touchmål under 44px, läsbarhet i solljus, för många steg, saknad offline-hantering. Tänk: handskebeklädd tumme. Returnera ENBART JSON: {"status":"GODKÄND"/"AVVISAD","findings":["..."],"severity":"LOW"/"MEDIUM"/"HIGH","suggestions":["..."]}'},
 
     # ── Testbarhet ───────────────────────────────────────────────────────────────
     {"id":"tester","name":"Testbarhet","emoji":"🧪","model":"ollama:qwen2.5-coder:7b","enabled":True,
-     "prompt":'Du ansvarar ENBART för testbarhet. Granska: är koden testbar (inga side effects i render, tydliga inputs/outputs)? Vilka edge cases saknar täckning? null/undefined-scenarier, nätverksfel, tomma listor, race conditions. Lista de 3 viktigaste saknade testfallen. Returnera ENBART JSON: {"status":"GODKÄND"/"AVVISAD","findings":["..."],"severity":"LOW"/"MEDIUM"/"HIGH","suggestions":["..."]}'},
+     "prompt":'Du ansvarar ENBART för testbarhet. Granska: testbar kod utan side effects, edge cases utan täckning (null, nätverksfel, tomma listor, race conditions). Lista de 3 viktigaste saknade testfallen. Returnera ENBART JSON: {"status":"GODKÄND"/"AVVISAD","findings":["..."],"severity":"LOW"/"MEDIUM"/"HIGH","suggestions":["..."]}'},
 
     # ── Inspector (sista grinden) ─────────────────────────────────────────────
     {"id":"inspector","name":"Besiktningsman","emoji":"✅","model":"sonnet","enabled":True,"is_inspector":True,
@@ -192,6 +291,47 @@ def add_feature(pid: str, name: str, phase: str = "MVP", spec: dict = None):
                      "created": datetime.now().isoformat()})
     save_features(pid, features)
 
+def add_subtasks(pid: str, parent_name: str, deluppgifter: list) -> list:
+    """Skapar deluppgifter som sub-features under parent_name.
+    Returnerar lista med namn på tillagda deluppgifter."""
+    features = load_features(pid)
+    existing_names = {f["name"] for f in features}
+    added = []
+    for sub in sorted(deluppgifter, key=lambda x: x.get("prioritet", 99)):
+        raw_name = sub.get("namn", "Deluppgift")
+        name = f"{parent_name}: {raw_name}"
+        # Undvik dubletter
+        if name in existing_names:
+            continue
+        existing_names.add(name)
+        beroenden = sub.get("beroende_av", [])
+        # Prefix beroenden med parent om de inte redan är prefixade
+        beroenden_full = [
+            b if b.startswith(parent_name) else f"{parent_name}: {b}"
+            for b in beroenden
+        ]
+        features.append({
+            "id": len(features) + 1,
+            "name": name,
+            "phase": "MVP",
+            "status": "Planerad",
+            "parent_feature": parent_name,
+            "spec": {
+                "name": name,
+                "description": sub.get("spec", ""),
+                "beroende_av": beroenden_full
+            },
+            "created": datetime.now().isoformat()
+        })
+        added.append(name)
+    # Markera parent som Blockerad
+    for f in features:
+        if f["name"] == parent_name:
+            f["status"] = "Blockerad"
+    save_features(pid, features)
+    update_features_md(pid)
+    return added
+
 def load_project_settings(pid: str) -> dict:
     f = project_dir(pid) / "project_settings.json"
     return json.loads(f.read_text(encoding="utf-8")) if f.exists() else {}
@@ -274,35 +414,246 @@ def clone_or_pull(github_repo: str, pid: str, branch: str = None) -> tuple[Path,
             f"VITE_SUPABASE_ANON_KEY={ps.get('supabase_prod_key','')}\n",
             encoding="utf-8")
 
+    # Auto-generera STRUKTURINDEX.md om den saknas (krävs av Strukturnavigatorn)
+    si_path = rd / "STRUKTURINDEX.md"
+    if not si_path.exists():
+        try:
+            generate_strukturindex(pid, rd)
+        except Exception:
+            pass  # Misslyckas tyst — genereras nästa gång istället
+
     return rd, ""
 
-def read_codebase_context(rd: Path, spec: dict) -> str:
-    context = ""
-    priority = ["package.json", "tsconfig.json", "src/integrations/supabase/types.ts",
-                "src/types/index.ts", "src/lib/supabase.ts"]
-    for rel in priority:
-        p = rd / rel
+_SKIP_DIRS = {"node_modules", ".git", "dist", "build", "__pycache__", ".next", "coverage"}
+
+def _should_skip(path: Path) -> bool:
+    return any(skip in path.parts for skip in _SKIP_DIRS)
+
+def build_file_index(path: Path) -> str:
+    """Strukturindex för en Python/JS/TS-fil: alla funktioner, endpoints och sektioner med radnummer."""
+    try:
+        lines = path.read_text(encoding="utf-8", errors="ignore").split("\n")
+    except Exception:
+        return ""
+    total = len(lines)
+    rows = [f"  [{total} rader]"]
+    for i, line in enumerate(lines, 1):
+        s = line.strip()
+        if "# ───" in s or "# ---" in s:
+            rows.append(f"  r{i}: {s[:70]}")
+        elif s.startswith("@app.") or s.startswith("@router."):
+            rows.append(f"  r{i}: {s.split('(')[0]}")
+        elif s.startswith("async def ") or s.startswith("def "):
+            indent = "    " if len(line) - len(line.lstrip()) > 0 else "  "
+            rows.append(f"{indent}r{i}: {s.split('(')[0]}")
+        elif s.startswith("class "):
+            rows.append(f"\n  r{i}: {s.split(':')[0]}")
+        elif (s.startswith("function ") or s.startswith("async function ")
+              or s.startswith("export function") or s.startswith("export async function")
+              or s.startswith("export default function")):
+            rows.append(f"  r{i}: {s.split('(')[0][:60]}")
+        elif s.startswith("export const ") and "=>" in s:
+            rows.append(f"  r{i}: {s.split('=')[0].strip()[:60]}")
+    return "\n".join(rows)
+
+def get_file_section(path: Path, keyword_list: list, max_chars: int = 3000) -> str:
+    """Returnerar sektioner i filen som matchar keywords — kompletta funktioner, ej avklippta."""
+    try:
+        lines = path.read_text(encoding="utf-8", errors="ignore").split("\n")
+    except Exception:
+        return ""
+    hits = set()
+    for i, line in enumerate(lines):
+        if any(kw.lower() in line.lower() for kw in keyword_list):
+            # Ta med omgivande funktion: backa till def/function
+            start = i
+            for j in range(i, max(-1, i-60), -1):
+                s = lines[j].strip()
+                if (s.startswith("def ") or s.startswith("async def ")
+                        or s.startswith("function ") or s.startswith("async function")
+                        or s.startswith("export")):
+                    start = j
+                    break
+            hits.add(start)
+    if not hits:
+        return ""
+    sections = []
+    for start in sorted(hits)[:4]:
+        chunk = "\n".join(lines[start:start+50])
+        sections.append(f"# rad {start+1}:\n{chunk}")
+    result = "\n\n...\n\n".join(sections)
+    return result[:max_chars]
+
+
+def generate_strukturindex(pid: str, rd: Path) -> str:
+    """Genererar STRUKTURINDEX.md och sparar den i projektmappen.
+    Returnerar sökvägen till den skapade filen."""
+    lines = ["# STRUKTURINDEX", f"Uppdaterad: {datetime.now().strftime('%Y-%m-%d %H:%M')}", ""]
+
+    # ── Katalogträd ──────────────────────────────────────────────────────────
+    lines += ["## Filstruktur", "```"]
+    all_files: list[tuple] = []
+    for ext in (".py", ".ts", ".tsx", ".js", ".jsx", ".css", ".json", ".html", ".md"):
+        for f in rd.rglob(f"*{ext}"):
+            if _should_skip(f):
+                continue
+            try:
+                all_files.append((f.relative_to(rd), f.stat().st_size, f))
+            except Exception:
+                pass
+    all_files.sort(key=lambda x: str(x[0]))
+
+    # Bygg träd
+    seen_dirs: set = set()
+    for rel, sz, _ in all_files:
+        parts = rel.parts
+        for depth in range(len(parts) - 1):
+            d = "/".join(parts[:depth+1])
+            if d not in seen_dirs:
+                seen_dirs.add(d)
+                lines.append("  " * depth + parts[depth] + "/")
+        indent = "  " * (len(parts) - 1)
+        label = f"{sz//1024}kb" if sz >= 1024 else f"{sz}b"
+        lines.append(f"{indent}{parts[-1]}  ({label})")
+    lines += ["```", ""]
+
+    # ── Strukturindex per fil ─────────────────────────────────────────────────
+    lines += ["## Strukturindex per fil", ""]
+    for rel, sz, full in sorted(all_files, key=lambda x: x[1], reverse=True)[:20]:
+        if rel.suffix not in (".py", ".ts", ".tsx", ".js"):
+            continue
+        idx = build_file_index(full)
+        if idx.strip():
+            lines += [f"### {rel}", "```", idx, "```", ""]
+
+    # ── Konventioner (försök läsa befintliga) ─────────────────────────────────
+    # Detektera projekt-typ
+    is_react = any(str(r).endswith("package.json") for r, _, _ in all_files)
+    is_python = any(r.suffix == ".py" for r, _, _ in all_files)
+
+    lines += ["## Konventioner", ""]
+    if is_react:
+        lines += [
+            "- Komponenter: `src/components/[domän]/[Komponent].tsx` (PascalCase)",
+            "- Sidor: `src/pages/[Sida].tsx`",
+            "- Hooks: `src/hooks/use[Namn].ts`",
+            "- API/Supabase: `src/lib/[namn].ts`",
+            "- Typer: `src/types/index.ts` eller `src/types/[domän].ts`",
+            "- Utils: `src/utils/[namn].ts`",
+            "",
+        ]
+    if is_python:
+        lines += [
+            "- Endpoints: `app.py` under rätt `# ───` sektion",
+            "- Agenter: DEFAULT_AGENTS eller POST_BUILD_AGENTS",
+            "- Helpers: nära relaterade funktioner",
+            "",
+        ]
+
+    content = "\n".join(lines)
+    # Spara i projektets datamapp OCH i repots rot om det finns
+    data_path = project_dir(pid) / "STRUKTURINDEX.md"
+    data_path.write_text(content, encoding="utf-8")
+    if rd.exists():
+        repo_path = rd / "STRUKTURINDEX.md"
+        try:
+            repo_path.write_text(content, encoding="utf-8")
+        except Exception:
+            pass
+    return str(data_path)
+
+
+def read_codebase_context(rd: Path, spec: dict, for_ollama: bool = False) -> str:
+    """Bygger rik kodbas-kontext: karta + strukturindex + relevanta sektioner.
+
+    for_ollama=True → komprimerat för modeller med litet kontextfönster (≤8k).
+    """
+    parts = []
+
+    # ── DEL 0: STRUKTURINDEX.md — alltid allra först ─────────────────────────
+    # Letar i repots rot och i projektets datamapp
+    for si_path in [rd / "STRUKTURINDEX.md"]:
+        if si_path.exists():
+            try:
+                si_content = si_path.read_text(encoding="utf-8", errors="ignore")
+                # Komprimera för Ollama: bara rubrikerna + konventioner
+                if for_ollama:
+                    si_lines = [l for l in si_content.split("\n")
+                                if l.startswith("#") or l.startswith("- ") or l.startswith("  ") and "(" in l]
+                    si_content = "\n".join(si_lines[:80])
+                parts.append(f"=== STRUKTURINDEX.md ===\n{si_content[:8000]}")
+            except Exception:
+                pass
+            break
+
+    # ── DEL 1: Filkarta (alltid med — kompakt) ───────────────────────────────
+    all_files: list[tuple] = []
+    for ext in (".py", ".ts", ".tsx", ".js", ".jsx", ".css", ".json", ".html", ".md"):
+        for f in rd.rglob(f"*{ext}"):
+            if _should_skip(f):
+                continue
+            try:
+                sz = f.stat().st_size
+                all_files.append((f.relative_to(rd), sz, f))
+            except Exception:
+                pass
+    all_files.sort(key=lambda x: x[1], reverse=True)
+
+    karta_rows = []
+    for rel, sz, _ in all_files[:50]:
+        label = f"{sz//1024}kb" if sz >= 1024 else f"{sz}b"
+        karta_rows.append(f"  {rel} ({label})")
+    parts.append("=== KODBAS-KARTA ===\n" + "\n".join(karta_rows))
+
+    # ── DEL 2: Strukturindex (för .py, .ts, .tsx, .js) ──────────────────────
+    if not for_ollama:
+        for rel, sz, full in all_files:
+            if rel.suffix in (".py", ".ts", ".tsx", ".js") and sz > 300:
+                idx = build_file_index(full)
+                if idx.strip():
+                    parts.append(f"=== INDEX: {rel} ===\n{idx}")
+
+    # ── DEL 3: Konfigfiler i sin helhet ─────────────────────────────────────
+    priority = ["package.json", "tsconfig.json", "requirements.txt",
+                ".env.example", "vite.config.ts", "tailwind.config.ts"]
+    for rel_name in priority:
+        p = rd / rel_name
         if p.exists():
-            content = p.read_text(encoding="utf-8", errors="ignore")[:2000]
-            context += f"\n\n=== {rel} ===\n{content}"
-    src = rd / "src"
-    if src.exists():
-        structure = [str(f.relative_to(rd)) for f in src.rglob("*")
-                     if f.is_file() and f.suffix in (".ts",".tsx",".css")]
-        context += f"\n\n=== Filstruktur (src/) ===\n" + "\n".join(structure[:60])
-    keywords = []
-    for field in ["name","problem","solution"]:
-        val = spec.get(field,"")
-        if val: keywords.extend(val.lower().split())
-    kws = [k for k in keywords if len(k) > 4][:8]
-    if src.exists():
-        for f in src.rglob("*.tsx"):
-            if any(kw in f.name.lower() for kw in kws):
+            try:
+                content = p.read_text(encoding="utf-8", errors="ignore")[:1500]
+                parts.append(f"=== {rel_name} ===\n{content}")
+            except Exception:
+                pass
+
+    # ── DEL 4: Relevanta sektioner baserat på spec-keywords ─────────────────
+    kws: list[str] = []
+    for field in ("name", "description", "problem", "solution", "spec"):
+        val = spec.get(field, "")
+        if isinstance(val, str):
+            kws.extend(w for w in val.lower().split() if len(w) > 4)
+    kws = list(dict.fromkeys(kws))[:8]  # unika, max 8
+
+    if kws:
+        for rel, sz, full in all_files[:15]:
+            if rel.suffix in (".py", ".ts", ".tsx", ".js", ".html"):
+                sec = get_file_section(full, kws, max_chars=2000)
+                if sec:
+                    parts.append(f"=== RELEVANTA AVSNITT: {rel} ===\n{sec}")
+
+    # ── DEL 5: Små filer i sin helhet (< 200 rader) ──────────────────────────
+    if not for_ollama:
+        for rel, sz, full in all_files:
+            if rel.suffix in (".py", ".ts", ".tsx", ".js") and sz < 4000:
                 try:
-                    content = f.read_text(encoding="utf-8", errors="ignore")[:3000]
-                    context += f"\n\n=== {f.relative_to(rd)} (befintlig) ===\n{content}"
-                except: pass
-    return context[:12000]
+                    content = full.read_text(encoding="utf-8", errors="ignore")
+                    if len(content.split("\n")) < 200:
+                        parts.append(f"=== FULL FIL: {rel} ===\n{content}")
+                except Exception:
+                    pass
+
+    result = "\n\n".join(parts)
+    limit = 10000 if for_ollama else 35000
+    return result[:limit]
 
 def generate_diff_text(old_content: str, new_content: str, filename: str) -> list[dict]:
     old_lines = old_content.splitlines(keepends=True) if old_content else []
@@ -342,15 +693,19 @@ async def build_code(spec: dict, pid: str) -> tuple[list, str]:
     proj = get_active_project()
     if not proj or not proj.get("github"): return [], "Inget GitHub-repo kopplat."
     if is_self_project(pid):
-        rd = effective_repo_dir(pid)  # Rotmappen direkt
-        # For ishoo-creator: inkludera app.py och index.html som kontext
+        rd = effective_repo_dir(pid)
+        # Ishoo Creator: ge Snickaren full strukturell kontext om sina egna filer
         ctx_parts = []
         for fname in ["app.py", "index.html"]:
             fp = rd / fname
             if fp.exists():
                 raw = fp.read_text(encoding="utf-8", errors="ignore")
-                # Trunkera till 8000 tecken per fil for att spara tokens
-                ctx_parts.append(f"=== {fname} ({len(raw)} tecken, visar forsta 8000) ===\n{raw[:8000]}")
+                idx = build_file_index(fp)
+                # Ge index + full fil (Snickaren behöver se allt för att skriva korrekt kod)
+                ctx_parts.append(
+                    f"=== {fname} — INDEX ===\n{idx}\n\n"
+                    f"=== {fname} — FULL KOD ({len(raw.splitlines())} rader) ===\n{raw}"
+                )
         context = "\n\n".join(ctx_parts) if ctx_parts else "Inga filer hittades."
     else:
         rd, err = clone_or_pull(proj["github"], pid)
@@ -574,28 +929,45 @@ FASÖVERSIKT:
 
 # ─── Domare — aktiveras efter max_iter misslyckanden ─────────────────────────
 
-DOMARE_PROMPT = """Du är Domaren — du aktiveras när granskningspipelinen misslyckats {max_iter} gånger i rad.
+DOMARE_PROMPT = """Du är Domaren — kontinuerlig prioriterare. Du aktiveras när en granskning misslyckas.
 
-DITT ENDA JOBB:
-Analysera ALLA misslyckade iterationer och sammanställ en tydlig rapport till Projektledaren.
+DITT JOBB I EXAKT DENNA ORDNING:
 
-Du ska svara på:
-1. Vilka problem återkommer i VARJE iteration? (dessa är blockerare)
-2. Vilka problem dök upp bara ibland? (dessa är sekundära)
-3. Vad är grundorsaken — är det specat för oklart, tekniskt problem, eller resursbrist?
-4. Vad behöver göras FÖRE detta kan byggas? Prioriterat 1-3 åtgärder.
+STEG 1 — Kategorisera blockerarna:
+Dela in alla agentfynd i:
+  A) MÅSTE FIXAS FÖRST (blockerar allt annat — spec oklart, kritisk infrastruktur saknas)
+  B) MÅSTE FIXAS (HIGH-problem som stoppar bygget)
+  C) BÖR FIXAS (MEDIUM-problem som påverkar kvalitet men inte stoppar)
+  D) KAN VÄNTA (LOW-problem, teknisk skuld)
+
+STEG 2 — Bryt ner i MINIMALA BYGGBARA DELUPPGIFTER:
+Varje deluppgift ska vara så liten att den:
+  - Kan granskas och byggas på under 30 minuter
+  - Löser EXAKT EN blockerare
+  - Kan testas självständigt
+Skapa 2-5 deluppgifter MAX. Om fler behövs, prioritera de viktigaste.
+
+STEG 3 — Sätt HÅRD BEROENDEORDNING:
+Om deluppgift B beror på deluppgift A → sätt beroende_av: ["A"].
+Ingen deluppgift ska byggas om dess beroenden inte är GODKÄNDA och BYGGDA.
+
+STEG 4 — Tydliggör vem som behöver agera:
+  - "Användaren" = beslut/konfiguration som kräver mänskligt ingripande
+  - "Snickaren" = ren kodändring som AI kan göra
+  - "Projektledaren + Användaren" = diskussion krävs
 
 FORMAT — returnera ENBART JSON:
 {{
   "blockerare": [
-    {{"problem": "...", "berorda_agenter": ["..."], "antal_iterationer": 2, "rekommendation": "..."}}
+    {{"problem": "...", "kategori": "A"/"B"/"C"/"D", "berorda_agenter": ["..."], "rekommendation": "..."}}
   ],
-  "sekundara_problem": ["..."],
-  "grundorsak": "Spec för vag / Teknisk skuld / Saknat beroende / Säkerhetsrisk",
-  "prioriterad_atgardsplan": [
-    {{"prioritet": 1, "atgard": "...", "vem": "Användaren/Snickaren/Projektledaren", "beraknad_tid": "..."}}
+  "grundorsak": "Spec för vag / Teknisk skuld / Saknat beroende / Säkerhetsrisk / Infrastruktur saknas",
+  "deluppgifter": [
+    {{"prioritet": 1, "namn": "Kort unikt namn", "spec": "Exakt vad som ska implementeras — tillräckligt detaljerat för Snickaren att bygga direkt", "vem": "Snickaren"/"Användaren", "beroende_av": [], "beraknad_tid": "15min"}},
+    {{"prioritet": 2, "namn": "...", "spec": "...", "vem": "...", "beroende_av": ["Prioritet 1 namn"], "beraknad_tid": "..."}}
   ],
-  "projektledare_sammanfattning": "Kortfattad text som Projektledaren kan presentera direkt för användaren på svenska",
+  "nasta_steg": "Exakt vad användaren ska göra NU — ett konkret nästa steg",
+  "projektledare_sammanfattning": "Kortfattad text på svenska — max 3 meningar",
   "kan_byggas_nu": false
 }}"""
 
@@ -627,7 +999,29 @@ Returnera ENBART JSON: {"status":"GODKÄND"/"AVVISAD","findings":["..."],"severi
         "emoji": "🔗",
         "model": "ollama:qwen2.5-coder:7b",
         "stage": "post",
-        "prompt": """Du ansvarar ENBART för att kontrollera att ny kod inte bryter befintliga gränssnitt: ändrade API-signaturer, borttagna exports, inkompatibla props/typer, saknade databas-migreringar, brutna imports från andra moduler. Rapportera INTE kodkvalitet eller buggar.
+        "prompt": """Du ansvarar ENBART för att kontrollera att ny kod inte bryter befintliga gränssnitt: ändrade API-signaturer, borttagna exports, inkompatibla props/typer, saknade databas-migreringar, brutna imports. Rapportera INTE kodkvalitet eller buggar.
+Returnera ENBART JSON: {"status":"GODKÄND"/"AVVISAD","findings":["..."],"severity":"LOW"/"MEDIUM"/"HIGH","suggestions":["..."]}"""
+    },
+    {
+        "id": "dokumenteraren",
+        "name": "Dokumenteraren",
+        "emoji": "📝",
+        "model": "ollama:qwen2.5-coder:7b",
+        "stage": "post",
+        "prompt": """Du ansvarar ENBART för dokumentation av nybyggd kod.
+Kontrollera: saknar exporterade funktioner JSDoc-kommentarer? Saknar komplexa logikblock förklarande kommentarer? Är komponenters props odokumenterade? Är README eller ARCHITECTURE.md inaktuell?
+Hitta INTE buggar. Föreslå INTE refaktorering.
+Returnera ENBART JSON: {"status":"GODKÄND"/"AVVISAD","findings":["Funktion X saknar JSDoc","..."],"severity":"LOW"/"MEDIUM"/"HIGH","suggestions":["/** @param {string} id - Beskrivning */\nexport function X(id: string) {...}"]}"""
+    },
+    {
+        "id": "konsistensgranskare",
+        "name": "Konsistensgranskaren",
+        "emoji": "🎯",
+        "model": "ollama:qwen2.5-coder:7b",
+        "stage": "post",
+        "prompt": """Du ansvarar ENBART för konsistens med befintlig kodbas.
+Kontrollera: följer ny kod samma mönster som liknande befintlig kod? Används samma namnkonventioner? Samma felhanteringsmönster? Samma import-struktur? Samma komponentstruktur?
+Exempel på problem: en ny hook skrivs på ett helt annat sätt än befintliga hooks, en ny sida använder class-komponenter när resten använder functional, en ny API-funktion returnerar en annan form än resten.
 Returnera ENBART JSON: {"status":"GODKÄND"/"AVVISAD","findings":["..."],"severity":"LOW"/"MEDIUM"/"HIGH","suggestions":["..."]}"""
     },
 ]
@@ -693,7 +1087,8 @@ def run_agent_ollama(agent_def: dict, spec: str, memory: str, feedback: str = ""
     model_key = agent_def.get("model", "sonnet")
     ollama_model = model_key.split("ollama:", 1)[1] if "ollama:" in model_key else "qwen2.5-coder:7b"
     fb = f"\n\nFEEDBACK:\n{feedback}" if feedback else ""
-    code_block = f"\n\nKODBAS (aktuell):\n{code_context[:8000]}" if code_context else ""
+    # Ollama har begränsat kontextfönster — karta + index ryms i 10k
+    code_block = f"\n\nKODBAS (aktuell):\n{code_context[:10000]}" if code_context else ""
     messages = [
         {"role": "system", "content": agent_def["prompt"]},
         {"role": "user", "content": f"MINNE:\n{memory}\n\nSPEC:\n{spec}{code_block}{fb}\n\nReturnera ENBART JSON."}
@@ -763,9 +1158,11 @@ def run_agent(agent_def: dict, spec: str, memory: str, feedback: str = "", s: di
         return {"agent":agent_def["name"],"id":agent_def["id"],"status":"GODKÄND","findings":["Demo-läge"],"severity":"LOW","suggestions":[]}
     model_name = model_for(model_key, s)
     fb = f"\n\nFEEDBACK:\n{feedback}" if feedback else ""
-    code_block = f"\n\nKODBAS (aktuell):\n{code_context[:8000]}" if code_context else ""
+    # Kontextgräns per modell — Claude kan hantera mycket mer än Ollama
+    ctx_limit = 35000 if model_key in ("sonnet", "opus") else 20000
+    code_block = f"\n\nKODBAS (aktuell):\n{code_context[:ctx_limit]}" if code_context else ""
     is_domare = agent_def.get("id") == "domare"
-    max_tokens = 2000 if is_domare else 900
+    max_tokens = 3000 if is_domare else 1500
     try:
         r = client_inst.messages.create(model=model_name, max_tokens=max_tokens,
             system=agent_def["prompt"],
@@ -963,10 +1360,19 @@ async def delete_feature(feature_name: str):
     if not proj:
         return JSONResponse({"ok": False, "error": "Inget aktivt projekt"}, status_code=400)
     pid = proj["id"]
-    # Ta bort från features.json
+    # Ta bort från features.json — inkl. alla deluppgifter (barn) rekursivt
     features = load_features(pid)
     before = len(features)
-    features = [f for f in features if f["name"] != feature_name]
+    to_remove = {feature_name}
+    # Rekursivt hitta alla barn-features
+    changed = True
+    while changed:
+        changed = False
+        for f in features:
+            if f.get("parent_feature") in to_remove and f["name"] not in to_remove:
+                to_remove.add(f["name"])
+                changed = True
+    features = [f for f in features if f["name"] not in to_remove]
     save_features(pid, features)
     # Rensa väntande bygge om det gäller denna feature
     pending = load_pending(pid)
@@ -992,7 +1398,7 @@ async def chat(payload: dict):
     # Ge Projektledaren tillgång till aktuell kodbas
     rd_chat = effective_repo_dir(proj["id"])
     code_ctx_chat = read_codebase_context(rd_chat, {"name": message, "problem": message, "solution": ""}) if rd_chat.exists() else ""
-    code_section = f"\n\nAKTUELL KODBAS:\n{code_ctx_chat[:6000]}" if code_ctx_chat else ""
+    code_section = f"\n\nAKTUELL KODBAS:\n{code_ctx_chat}" if code_ctx_chat else ""
     system=PROJEKTLEDARE_PROMPT.format(project_name=proj["name"],project_desc=proj.get("description",""),
         project_github=proj.get("github","Ej angivet"),memory=memory,phases=phases) + code_section
     response=client_inst.messages.create(model=model_for("projektledare",s),max_tokens=1500,system=system,
@@ -1011,7 +1417,7 @@ async def chat(payload: dict):
         clean_reply = _re.sub(r'\[FRÅGA\][\s\S]*?\[/FRÅGA\]', '', reply).strip()
     return JSONResponse({"reply":clean_reply,"feature_detected":feature_name,"feature_spec":feature_spec,"system_config":system_config,"question":question})
 
-# Review
+# Review — EN enda pass. Om något agent säger ifrån → Domaren direkt.
 @app.post("/api/review")
 async def review_feature(payload: dict):
     feature_name = payload.get("feature_name", "Okand")
@@ -1020,195 +1426,159 @@ async def review_feature(payload: dict):
     if not proj:
         return JSONResponse({"approved": False})
     s = load_settings()
-    max_iter = int(s.get("max_iterations", 3))
     memory = load_memory(proj["id"])
     spec_str = json.dumps(spec_obj, ensure_ascii=False) if spec_obj else feature_name
     loop = asyncio.get_event_loop()
     agents, inspector = get_agents_from_settings(s)
-    all_approved = False
-    snickare_instruktioner = ""
+    rd = effective_repo_dir(proj["id"])
+    # Bygg två versioner av kontexten: rik för Claude, komprimerad för Ollama
+    code_ctx_claude  = read_codebase_context(rd, spec_obj, for_ollama=False) if rd.exists() else ""
+    code_ctx_ollama  = read_codebase_context(rd, spec_obj, for_ollama=True)  if rd.exists() else ""
+    def ctx_for(agent_def: dict) -> str:
+        return code_ctx_ollama if agent_def.get("model","").startswith("ollama:") else code_ctx_claude
 
     await manager.broadcast({"type": "pipeline_start", "feature": feature_name,
         "agents": [{"id": a["id"], "name": f"{a.get('emoji','')}{a['name']}", "model": a.get("model","haiku")}
                    for a in agents + [inspector]]})
+    await manager.broadcast({"type": "iteration", "iteration": 1, "max": 1})
 
-    all_iteration_results = []  # Samlar ALLA iterationers data för Domaren
+    # ── Steg 1: Kör ALLA granskare parallellt ────────────────────────────────
+    for agent in agents:
+        await manager.broadcast({"type": "agent_status", "id": agent["id"],
+            "name": f"{agent.get('emoji','')}{agent['name']}", "status": "running"})
 
-    for iteration in range(1, max_iter + 1):
-        await manager.broadcast({"type": "iteration", "iteration": iteration, "max": max_iter})
-        for agent in agents:
-            await manager.broadcast({"type": "agent_status", "id": agent["id"],
-                "name": f"{agent.get('emoji','')}{agent['name']}", "status": "running"})
-
-        # Kör alla granskare parallellt — broadcast direkt när varje agent är klar
-        results = []
-        prev_ctx = f"TIDIGARE BYGGINSIKTER:\n{snickare_instruktioner}" if snickare_instruktioner else ""
-        rd = effective_repo_dir(proj["id"])
-        code_ctx = read_codebase_context(rd, spec_obj) if rd.exists() else ""
-
-        from concurrent.futures import as_completed as _as_completed
-        ex = ThreadPoolExecutor(max_workers=min(len(agents), 10))
-        future_to_agent = {ex.submit(run_agent, ag, spec_str, memory, prev_ctx, s, code_ctx): ag
-                           for ag in agents}
-        try:
-            # as_completed levererar futures i den ordning de FAKTISKT blir klara
-            pending = set(future_to_agent.keys())
-            while pending:
-                done_future = await loop.run_in_executor(None,
-                    lambda fs=list(pending): next(_as_completed(fs)))
-                pending.discard(done_future)
-                ag = future_to_agent[done_future]
-                try:
-                    result = done_future.result()
-                except Exception as e:
-                    result = {"id": ag["id"], "agent": ag["name"], "status": "GODKAND",
-                              "findings": [f"Agent-fel: {e}"], "severity": "LOW", "suggestions": []}
-                results.append(result)
-                await manager.broadcast({"type": "agent_status",
-                    "id": result.get("id"), "name": result.get("agent", "Agent"),
-                    "status": "approved" if result.get("status") in ("GODKAND","GODKÄND") else "rejected",
-                    "findings": result.get("findings", []),
-                    "severity": result.get("severity", "LOW"),
-                    "suggestions": result.get("suggestions", []),
-                    "local": result.get("_local", False)})
-        finally:
-            ex.shutdown(wait=False)
-
-        # Bygg detaljerad rapport till Inspector (agent-till-agent kommunikation)
-        parts = []
-        for r in results:
-            sev = r.get("severity", "LOW")
-            st = r.get("status", "GODKAND")
-            finds = "; ".join(r.get("findings", [])) or "Inga anmarkningar"
-            suggs = "; ".join(r.get("suggestions", [])) or "-"
-            parts.append(f"### {r.get('agent','?')} [{st}] [{sev}]\nFynd: {finds}\nForslag: {suggs}")
-        inspector_input = (
-            f"FEATURE: {feature_name}\n\nSPEC:\n{spec_str[:2000]}\n\n"
-            f"AGENT-FYND (iteration {iteration}/{max_iter}):\n" + "\n\n".join(parts)
-        )
-
-        await manager.broadcast({"type": "agent_status",
-            "id": inspector["id"],
-            "name": f"{inspector.get('emoji','')}{inspector['name']}",
-            "status": "running"})
-        insp = await loop.run_in_executor(None, run_agent, inspector, inspector_input, memory, "", s, code_ctx)
-        insp_status = insp.get("status", "GODKAND")
-        snickare_instruktioner = insp.get("snickare_instruktioner", "")
-        user_question = insp.get("user_question", "")
-
-        await manager.broadcast({"type": "agent_status",
-            "id": inspector["id"],
-            "name": f"{inspector.get('emoji','')}{inspector['name']}",
-            "status": "approved" if insp_status in ("GODKAND","GODKÄND") else "rejected",
-            "findings": insp.get("findings", []),
-            "severity": insp.get("severity", "LOW"),
-            "suggestions": insp.get("suggestions", []),
-            "inspector_note": snickare_instruktioner})
-
-        # Spara hela iterationens data för Domaren
-        all_iteration_results.append({
-            "iteration": iteration,
-            "agent_results": results,
-            "inspector": insp,
-        })
-
-        if insp_status in ("GODKAND", "GODKÄND"):
-            all_approved = True
-            features = load_features(proj["id"])
-            for f in features:
-                if f["name"] == feature_name:
-                    f["status"] = "Granskas"
-            save_features(proj["id"], features)
-            await manager.broadcast({"type": "pipeline_done", "success": True,
-                "feature": feature_name, "snickare_instruktioner": snickare_instruktioner})
-            break
-
-        # Avbryt och fraga anvandaren bara om Inspector explicit vill det (tidigt)
-        if user_question and iteration >= 2:
-            await manager.broadcast({"type": "pipeline_done", "success": False,
-                "feature": feature_name, "user_question": user_question,
-                "reason": "; ".join(insp.get("findings", []))})
-            return JSONResponse({"approved": False, "user_question": user_question})
-
-        if iteration == max_iter:
-            # MAX ITERATIONER NATT — aktivera Domaren
-            await manager.broadcast({"type": "domare_start", "feature": feature_name,
-                "iterations": max_iter})
-
-            # Bygg Domarens input — ALLA iterationers fynd per agent
-            domare_sections = []
-            for iter_data in all_iteration_results:
-                it = iter_data["iteration"]
-                domare_sections.append(f"## ITERATION {it}/{max_iter}")
-                for r in iter_data["agent_results"]:
-                    st = r.get("status", "?")
-                    sev = r.get("severity", "LOW")
-                    finds = "; ".join(r.get("findings", [])) or "Inga fynd"
-                    domare_sections.append(
-                        f"  {r.get('agent','?')} [{st}][{sev}]: {finds}"
-                    )
-                insp_it = iter_data["inspector"]
-                domare_sections.append(
-                    f"  Inspector [{insp_it.get('status','?')}]: "
-                    + "; ".join(insp_it.get("findings", []))
-                )
-
-            domare_input = (
-                f"FEATURE: {feature_name}\n\nSPEC:\n{spec_str[:1500]}\n\n"
-                + "\n".join(domare_sections)
-            )
-
-            domare_agent = {
-                "id": "domare",
-                "name": "Domaren",
-                "emoji": "⚖️",
-                "model": "sonnet",
-                "prompt": DOMARE_PROMPT.format(max_iter=max_iter),
-            }
-
-            await manager.broadcast({"type": "agent_status", "id": "domare",
-                "name": "⚖️ Domaren", "status": "running"})
-            domare_result = await loop.run_in_executor(
-                None, run_agent, domare_agent, domare_input, memory, "", s, code_ctx)
-
-            # Extrahera Domarens JSON
+    results = []
+    from concurrent.futures import as_completed as _as_completed
+    ex = ThreadPoolExecutor(max_workers=min(len(agents), 10))
+    future_to_agent = {ex.submit(run_agent, ag, spec_str, memory, "", s, ctx_for(ag)): ag
+                       for ag in agents}
+    try:
+        pending_futures = set(future_to_agent.keys())
+        while pending_futures:
+            done_future = await loop.run_in_executor(None,
+                lambda fs=list(pending_futures): next(_as_completed(fs)))
+            pending_futures.discard(done_future)
+            ag = future_to_agent[done_future]
             try:
-                dom_text = json.dumps(domare_result, ensure_ascii=False)
-            except Exception:
-                dom_text = str(domare_result)
+                result = done_future.result()
+            except Exception as e:
+                result = {"id": ag["id"], "agent": ag["name"], "status": "GODKAND",
+                          "findings": [f"Agent-fel: {e}"], "severity": "LOW", "suggestions": []}
+            results.append(result)
+            await manager.broadcast({"type": "agent_status",
+                "id": result.get("id"), "name": result.get("agent", "Agent"),
+                "status": "approved" if result.get("status") in ("GODKAND","GODKÄND") else "rejected",
+                "findings": result.get("findings", []),
+                "severity": result.get("severity", "LOW"),
+                "suggestions": result.get("suggestions", []),
+                "local": result.get("_local", False)})
+    finally:
+        ex.shutdown(wait=False)
 
-            pl_summary = domare_result.get("projektledare_sammanfattning",
-                "Pipelinen misslyckades — se Domarens rapport.")
-            blockerare = domare_result.get("blockerare", [])
-            atgarder = domare_result.get("prioriterad_atgardsplan", [])
+    # ── Steg 2: Inspector sammanväger alla fynd ───────────────────────────────
+    parts = []
+    for r in results:
+        finds = "; ".join(r.get("findings", [])) or "Inga anmarkningar"
+        suggs = "; ".join(r.get("suggestions", [])) or "-"
+        parts.append(
+            f"### {r.get('agent','?')} [{r.get('status','?')}] [{r.get('severity','LOW')}]\n"
+            f"Fynd: {finds}\nForslag: {suggs}"
+        )
+    inspector_input = (
+        f"FEATURE: {feature_name}\n\nSPEC:\n{spec_str[:2000]}\n\n"
+        f"AGENT-FYND:\n" + "\n\n".join(parts)
+    )
+    await manager.broadcast({"type": "agent_status",
+        "id": inspector["id"], "name": f"{inspector.get('emoji','')}{inspector['name']}",
+        "status": "running"})
+    insp = await loop.run_in_executor(None, run_agent, inspector, inspector_input, memory, "", s, code_ctx_claude)
+    insp_status = insp.get("status", "GODKAND")
+    snickare_instruktioner = insp.get("snickare_instruktioner", "")
 
-            await manager.broadcast({"type": "agent_status", "id": "domare",
-                "name": "⚖️ Domaren", "status": "rejected",
-                "findings": [b.get("problem","") for b in blockerare],
-                "severity": "HIGH"})
+    await manager.broadcast({"type": "agent_status",
+        "id": inspector["id"], "name": f"{inspector.get('emoji','')}{inspector['name']}",
+        "status": "approved" if insp_status in ("GODKAND","GODKÄND") else "rejected",
+        "findings": insp.get("findings", []),
+        "severity": insp.get("severity", "LOW"),
+        "suggestions": insp.get("suggestions", []),
+        "inspector_note": snickare_instruktioner})
 
-            # Skicka Domarens rapport till Projektledaren som chat-meddelande
-            pl_message = (
-                f"Jag har analyserat varför '{feature_name}' inte kunde byggas "
-                f"efter {max_iter} försök.\n\n"
-                f"{pl_summary}\n\n"
-            )
-            if blockerare:
-                pl_message += "**Blockerare:**\n"
-                for b in blockerare:
-                    pl_message += f"- {b.get('problem','')} (berör: {', '.join(b.get('berorda_agenter',[]))})\n"
-            if atgarder:
-                pl_message += "\n**Rekommenderad åtgärdsplan:**\n"
-                for a in atgarder:
-                    pl_message += f"{a.get('prioritet','?')}. {a.get('atgard','')} — {a.get('vem','')}\n"
-            pl_message += "\nVad vill du göra?"
+    # ── Steg 3: Godkänt → klart att bygga ────────────────────────────────────
+    if insp_status in ("GODKAND", "GODKÄND"):
+        features = load_features(proj["id"])
+        for f in features:
+            if f["name"] == feature_name:
+                f["status"] = "Granskas"
+        save_features(proj["id"], features)
+        await manager.broadcast({"type": "pipeline_done", "success": True,
+            "feature": feature_name, "snickare_instruktioner": snickare_instruktioner})
+        return JSONResponse({"approved": True, "snickare_instruktioner": snickare_instruktioner})
 
-            await manager.broadcast({"type": "pipeline_done", "success": False,
-                "feature": feature_name,
-                "domare_report": domare_result,
-                "projektledare_message": pl_message})
+    # ── Steg 4: Avvisat → Domaren analyserar direkt ──────────────────────────
+    await manager.broadcast({"type": "domare_start", "feature": feature_name})
 
-    return JSONResponse({"approved": all_approved, "snickare_instruktioner": snickare_instruktioner})
+    rejected = [r for r in results if r.get("status") not in ("GODKAND","GODKÄND")]
+    domare_sections = ["## AGENT-FYND"]
+    for r in results:
+        st = r.get("status","?"); sev = r.get("severity","LOW")
+        finds = "; ".join(r.get("findings",[])) or "Inga fynd"
+        domare_sections.append(f"  {r.get('agent','?')} [{st}][{sev}]: {finds}")
+    domare_sections.append(f"\n## INSPECTOR [{insp_status}]")
+    domare_sections.append("  " + "; ".join(insp.get("findings",[])))
+    if insp.get("user_question"):
+        domare_sections.append(f"\n  Inspector fråga: {insp['user_question']}")
+
+    domare_input = (
+        f"FEATURE: {feature_name}\n\nSPEC:\n{spec_str[:1500]}\n\n"
+        + "\n".join(domare_sections)
+    )
+    domare_agent = {"id":"domare","name":"Domaren","emoji":"⚖️","model":"sonnet",
+                    "prompt": DOMARE_PROMPT.format(max_iter=1)}
+
+    await manager.broadcast({"type": "agent_status", "id": "domare",
+        "name": "⚖️ Domaren", "status": "running"})
+    domare_result = await loop.run_in_executor(
+        None, run_agent, domare_agent, domare_input, memory, "", s, code_ctx_claude)
+
+    pl_summary = domare_result.get("projektledare_sammanfattning", "Granskningen misslyckades.")
+    blockerare = domare_result.get("blockerare", [])
+    atgarder = domare_result.get("prioriterad_atgardsplan", [])
+
+    await manager.broadcast({"type": "agent_status", "id": "domare",
+        "name": "⚖️ Domaren", "status": "rejected",
+        "findings": [b.get("problem","") for b in blockerare],
+        "severity": "HIGH"})
+
+    # ── Spara deluppgifter och markera parent som Blockerad ──────────────────
+    deluppgifter = domare_result.get("deluppgifter", [])
+    added_subtasks = []
+    if deluppgifter and proj:
+        added_subtasks = add_subtasks(proj["id"], feature_name, deluppgifter)
+
+    nasta_steg = domare_result.get("nasta_steg", "")
+    pl_message = f"{pl_summary}\n\n"
+    if blockerare:
+        # Visa bara A+B-blockerare (måste fixas) — inte C/D
+        critical = [b for b in blockerare if b.get("kategori","B") in ("A","B")]
+        if critical:
+            pl_message += "**Blockerare:**\n"
+            for b in critical:
+                agenter = ", ".join(b.get("berorda_agenter", []))
+                kategori = b.get("kategori","B")
+                pl_message += f"- [{kategori}] {b.get('problem','')} _(berör: {agenter})_\n"
+    if added_subtasks:
+        pl_message += f"\n**Jag har brutit ner featuren i {len(added_subtasks)} deluppgifter** som nu visas i listan nedan. "
+        pl_message += "De är ordnade i rätt byggordsföljd — börja uppifrån.\n"
+    if nasta_steg:
+        pl_message += f"\n**➡ Nästa steg:** {nasta_steg}"
+
+    await manager.broadcast({"type": "pipeline_done", "success": False,
+        "feature": feature_name,
+        "domare_report": domare_result,
+        "added_subtasks": added_subtasks,
+        "projektledare_message": pl_message})
+
+    return JSONResponse({"approved": False})
 
 # Build
 @app.post("/api/build")
@@ -1275,8 +1645,37 @@ Var kortfattad — detta är kontextfil för AI-agenter."""
             await manager.broadcast({"type":"architecture_updated","feature":feature_name})
         except: pass
     asyncio.ensure_future(_regen_arch())
+
+    # Uppdatera STRUKTURINDEX efter push (kodbasen har förändrats)
+    async def _regen_index():
+        try:
+            proj2 = get_active_project()
+            if proj2:
+                rd2 = effective_repo_dir(proj2["id"])
+                if rd2.exists():
+                    generate_strukturindex(proj2["id"], rd2)
+                    await manager.broadcast({"type": "strukturindex_updated", "feature": feature_name})
+        except Exception:
+            pass
+    asyncio.ensure_future(_regen_index())
+
     await manager.broadcast({"type":"push_done","feature":feature_name,"env":env})
     return JSONResponse({"success":True})
+
+
+@app.post("/api/rebuild-index")
+async def rebuild_strukturindex():
+    """Manuell trigger: bygg om STRUKTURINDEX.md för aktivt projekt."""
+    proj = get_active_project()
+    if not proj:
+        return JSONResponse({"ok": False, "error": "Inget aktivt projekt"}, status_code=400)
+    rd = effective_repo_dir(proj["id"])
+    if not rd.exists():
+        return JSONResponse({"ok": False, "error": "Ingen kodbas klonad ännu"}, status_code=400)
+    path = generate_strukturindex(proj["id"], rd)
+    await manager.broadcast({"type": "strukturindex_updated", "message": "STRUKTURINDEX.md uppdaterad"})
+    return JSONResponse({"ok": True, "path": path})
+
 
 # WebSocket
 
@@ -1904,12 +2303,12 @@ async def build_verify(payload: dict):
         if success:
             store_pending(pid, current_files, feature_name)
             diffs = compute_diffs(pid, current_files)
+            diffs = compute_diffs(pid, current_files)
             await manager.broadcast({
                 "type": "build_verify_done",
                 "success": True, "feature": feature_name, "iterations": iteration, "diffs": diffs})
             return JSONResponse({"success": True, "iterations": iteration, "diffs": diffs})
 
-        # Bygget misslyckades
         await manager.broadcast({
             "type": "build_verify_error",
             "output": output[:1200], "iteration": iteration})
@@ -1917,7 +2316,6 @@ async def build_verify(payload: dict):
         if not client_inst or iteration == max_iter:
             break
 
-        # Skicka byggfel till Snickaren for fix
         await manager.broadcast({
             "type": "build_verify_fixing",
             "message": f"Snickaren analyserar och fixar byggfelen (iteration {iteration})..."})
@@ -1937,7 +2335,6 @@ async def build_verify(payload: dict):
             si, e = text.find("{"), text.rfind("}") + 1
             fix_data = json.loads(text[si:e]) if si != -1 else {}
             fix_files = fix_data.get("files", [])
-            # Uppdatera current_files med fixarna
             fix_map = {f["path"]: f for f in fix_files}
             current_files = [fix_map.get(f["path"], f) for f in current_files]
             for fx in fix_files:
@@ -1953,7 +2350,6 @@ async def build_verify(payload: dict):
                 "output": f"Snickaren kunde inte fixa: {ex}", "iteration": iteration})
             break
 
-    # Misslyckades efter max iterationer
     await manager.broadcast({
         "type": "build_verify_done",
         "success": False, "feature": feature_name, "iterations": max_iter})
@@ -1961,149 +2357,139 @@ async def build_verify(payload: dict):
         {"success": False, "error": "Bygget misslyckades efter max iterationer"},
         status_code=500)
 
+
 # ─── System Health Check ──────────────────────────────────────────────────────
 
 @app.get("/api/health")
 async def system_health():
-    """Kontrollerar att alla systemkomponenter fungerar."""
     import urllib.request as _ur
     s = load_settings()
     results = {}
-
-    # 1. Claude API
-    api_key = s.get("api_key", "")
-    if not api_key:
-        results["claude"] = {"ok": False, "status": "Nyckel saknas", "detail": "Lägg till Anthropic API-nyckel i Inställningar"}
-    else:
-        try:
-            client = get_client(s)
-            r = client.messages.create(model=model_for("haiku", s), max_tokens=5,
-                messages=[{"role": "user", "content": "ok"}])
-            results["claude"] = {"ok": True, "status": "Ansluten", "detail": f"Modell: {model_for('haiku', s)}"}
-        except Exception as ex:
-            results["claude"] = {"ok": False, "status": "Fel", "detail": str(ex)[:120]}
-
-    # 2. GitHub Token
-    gh_token = s.get("github_token", "")
-    if not gh_token:
-        results["github"] = {"ok": False, "status": "Token saknas", "detail": "Behövs för att klona och pusha kod"}
-    else:
-        try:
+    try:
+        client_h = get_client(s)
+        if client_h:
+            r = client_h.messages.create(model=model_for("haiku",s), max_tokens=5,
+                messages=[{"role":"user","content":"ping"}])
+            results["anthropic"] = {"ok": True, "status": "Ansluten", "detail": r.model}
+        else:
+            results["anthropic"] = {"ok": False, "status": "API-nyckel saknas", "detail": ""}
+    except Exception as ex:
+        results["anthropic"] = {"ok": False, "status": "Fel", "detail": str(ex)[:120]}
+    try:
+        token = s.get("github_token","")
+        if token:
             req = _ur.Request("https://api.github.com/user",
-                              headers={"Authorization": f"token {gh_token}", "Accept": "application/vnd.github.v3+json"})
-            with _ur.urlopen(req, timeout=6) as r:
-                data = json.loads(r.read())
-            results["github"] = {"ok": True, "status": "Ansluten", "detail": f"Inloggad som: {data.get('login','')}"}
-        except Exception as ex:
-            results["github"] = {"ok": False, "status": "Ogiltig token", "detail": str(ex)[:120]}
-
-    # 3. Ollama
+                headers={"Authorization": f"token {token}", "User-Agent": "ishoo-creator"})
+            with _ur.urlopen(req, timeout=5) as r:
+                gh = json.loads(r.read())
+            results["github"] = {"ok": True, "status": f"Inloggad som {gh.get(chr(108)+chr(111)+chr(103)+chr(105)+chr(110),chr(63))}",
+                                  "detail": gh.get("name","")}
+        else:
+            results["github"] = {"ok": False, "status": "Token saknas", "detail": ""}
+    except Exception as ex:
+        results["github"] = {"ok": False, "status": "Ogiltig token", "detail": str(ex)[:120]}
     try:
         with _ur.urlopen("http://localhost:11434/api/tags", timeout=3) as r:
             data = json.loads(r.read())
-        models = [m.get("name", "") for m in data.get("models", [])]
+        models = [m.get("name","") for m in data.get("models",[])]
         if models:
             results["ollama"] = {"ok": True, "status": f"{len(models)} modell(er)", "detail": ", ".join(models)}
         else:
-            results["ollama"] = {"ok": False, "status": "Inga modeller", "detail": "Kör ollama-setup.bat för att ladda ner modeller"}
+            results["ollama"] = {"ok": False, "status": "Inga modeller", "detail": "Kor ollama-setup.bat"}
     except:
-        results["ollama"] = {"ok": False, "status": "Körs inte", "detail": "Installera Ollama från ollama.com eller kör ollama-setup.bat"}
-
-    # 4. Git
+        results["ollama"] = {"ok": False, "status": "Kors inte", "detail": "Installera Ollama"}
     try:
-        r = subprocess.run(["git", "--version"], capture_output=True, text=True, timeout=5)
-        ver = r.stdout.strip()
-        results["git"] = {"ok": r.returncode == 0, "status": ver if r.returncode == 0 else "Ej installerat",
-                          "detail": "Krävs för att hantera kod och versioner"}
-    except:
-        results["git"] = {"ok": False, "status": "Ej hittad", "detail": "Installera Git från git-scm.com"}
+        r = subprocess.run(["git","--version"], capture_output=True, text=True, timeout=5)
+        results["git"] = {"ok": r.returncode==0, "status": r.stdout.strip() if r.returncode==0 else "Ej installerat", "detail": ""}
+    except Exception as ex:
+        results["git"] = {"ok": False, "status": "Ej installerat", "detail": str(ex)}
+    return JSONResponse(results)
 
-    # 5. Node / npm
-    import sys
-    npm_cmd = "npm.cmd" if sys.platform == "win32" else "npm"
-    try:
-        r = subprocess.run([npm_cmd, "--version"], capture_output=True, text=True, timeout=5)
-        ver = r.stdout.strip()
-        results["npm"] = {"ok": r.returncode == 0, "status": f"npm {ver}" if r.returncode == 0 else "Ej installerat",
-                          "detail": "Krävs för att köra och bygga React-appar"}
-    except:
-        results["npm"] = {"ok": False, "status": "Ej hittad", "detail": "Installera Node.js från nodejs.org"}
-
-    # 6. Aktivt projekt
-    proj = get_active_project()
-    if proj:
-        rd = repo_dir(proj["id"])
-        repo_cloned = rd.exists() and (rd / ".git").exists()
-        results["project"] = {
-            "ok": True,
-            "status": proj["name"],
-            "detail": f"GitHub: {proj.get('github','ej satt')} | Repo: {'klonat' if repo_cloned else 'ej klonat än'}"
-        }
-    else:
-        results["project"] = {"ok": False, "status": "Inget projekt", "detail": "Skapa ett projekt för att börja bygga"}
-
-    all_ok = all(v["ok"] for k, v in results.items() if k != "ollama")
-    return JSONResponse({"ok": all_ok, "checks": results})
-
-# ─── Git Push (från UI) ───────────────────────────────────────────────────────
 
 @app.post("/api/git-push")
-async def git_push_to_github():
-    """Initierar git, skapar GitHub-repo och pushar — körs direkt från UI."""
-    import urllib.request as _ur
+async def git_push_simple():
+    """Enkel push — läser token och repo från aktivt projekt + settings."""
     s = load_settings()
+    proj = get_active_project()
     token = s.get("github_token", "")
     if not token:
-        return JSONResponse({"ok": False, "error": "GitHub-token saknas."}, status_code=400)
-
-    base = Path(".")
-    repo_name = "ishoo-creator"
-    steps = []
-
-    await manager.broadcast({"type": "git_push_step", "step": "Skapar GitHub-repo..."})
-    data = json.dumps({"name": repo_name, "description": "Ishoo Creator v6 - AI-driven app builder", "private": False, "auto_init": False}).encode()
-    req = _ur.Request("https://api.github.com/user/repos", data=data, method="POST")
-    req.add_header("Authorization", f"token {token}")
-    req.add_header("Content-Type", "application/json")
-    req.add_header("Accept", "application/vnd.github.v3+json")
+        return JSONResponse({"ok": False, "error": "GitHub-token saknas i Inställningar"})
+    if not proj or not proj.get("github"):
+        return JSONResponse({"ok": False, "error": "Inget GitHub-repo kopplat till aktivt projekt"})
+    github_repo = proj["github"]  # format: "username/repo"
+    parts = github_repo.split("/")
+    username = parts[0] if len(parts) == 2 else "Stuwish1"
+    repo_name = parts[1] if len(parts) == 2 else github_repo
+    rd = effective_repo_dir(proj["id"])
+    if not rd.exists():
+        return JSONResponse({"ok": False, "error": "Repo ej klonat — starta granskning eller bygge först"})
+    err = None
     try:
-        with _ur.urlopen(req) as r:
-            resp = json.loads(r.read())
-        steps.append(f"Repo skapat: {resp.get('html_url','')}")
-    except _ur.HTTPError as e:
-        body = e.read().decode()
-        if "already exists" in body or "name already exists" in body:
-            steps.append("Repo finns redan")
-        else:
-            return JSONResponse({"ok": False, "error": f"GitHub API-fel: {body[:200]}"})
-
-    await manager.broadcast({"type": "git_push_step", "step": "Initierar git..."})
-    loop = asyncio.get_event_loop()
-    def do_git():
-        def g(*args):
-            return subprocess.run(["git"] + list(args), cwd=str(base), capture_output=True, text=True)
-        if not (base / ".git").exists():
-            g("init"); g("branch", "-M", "main")
-        g("config", "user.name", s.get("git_name", "Ishoo Creator"))
-        g("config", "user.email", s.get("git_email", "creator@ishoo.se"))
-        g("remote", "remove", "origin")
-        remote_url = f"https://{token}@github.com/Stuwish1/{repo_name}.git"
-        g("remote", "add", "origin", remote_url)
-        g("add", "-A")
-        r = g("commit", "-m", "feat: Ishoo Creator v6 - Spec-driven Edition")
-        if r.returncode != 0 and "nothing to commit" not in r.stdout and "nothing to commit" not in r.stderr:
-            return r.stderr[:300]
-        push = g("push", "-u", "--force", "origin", "main")
-        if push.returncode != 0:
-            return push.stderr[:300]
-        return ""
-    await manager.broadcast({"type": "git_push_step", "step": "Committar och pushar..."})
-    err = await loop.run_in_executor(None, do_git)
+        remote_url = f"https://{username}:{token}@github.com/{username}/{repo_name}.git"
+        subprocess.run(["git","remote","set-url","origin",remote_url], cwd=rd, check=True, capture_output=True)
+        subprocess.run(["git","add","-A"], cwd=rd, capture_output=True)
+        subprocess.run(["git","commit","--allow-empty","-m","chore: Ishoo Creator push"], cwd=rd, capture_output=True)
+        subprocess.run(["git","push","origin","HEAD"], cwd=rd, check=True, capture_output=True)
+    except subprocess.CalledProcessError as e:
+        err = e.stderr.decode(errors="ignore")[:300] if e.stderr else str(e)
+    except Exception as e:
+        err = str(e)
     if err:
         return JSONResponse({"ok": False, "error": err})
+    url = f"https://github.com/{username}/{repo_name}"
+    await manager.broadcast({"type": "git_push_done", "url": url})
+    return JSONResponse({"ok": True, "url": url})
 
-    await manager.broadcast({"type": "git_push_done", "url": f"https://github.com/Stuwish1/{repo_name}"})
-    return JSONResponse({"ok": True, "url": f"https://github.com/Stuwish1/{repo_name}"})
+
+@app.post("/api/git-push-direct")
+async def git_push_direct(payload: dict):
+    repo_name = payload.get("repo_name","")
+    token = payload.get("token","")
+    username = payload.get("username","Stuwish1")
+    if not repo_name or not token:
+        return JSONResponse({"ok": False, "error": "repo_name och token kravs"}, status_code=400)
+    rd = Path(".").resolve()
+    err = None
+    try:
+        remote_url = f"https://{username}:{token}@github.com/{username}/{repo_name}.git"
+        subprocess.run(["git","remote","set-url","origin",remote_url], cwd=rd, check=True, capture_output=True)
+        subprocess.run(["git","add","-A"], cwd=rd, capture_output=True)
+        subprocess.run(["git","commit","--allow-empty","-m","chore: Ishoo Creator push"], cwd=rd, capture_output=True)
+        subprocess.run(["git","push","origin","HEAD"], cwd=rd, check=True, capture_output=True)
+    except subprocess.CalledProcessError as e:
+        err = e.stderr.decode(errors="ignore")[:300] if e.stderr else str(e)
+    except Exception as e:
+        err = str(e)
+    if err:
+        return JSONResponse({"ok": False, "error": err})
+    url = f"https://github.com/{username}/{repo_name}"
+    await manager.broadcast({"type": "git_push_done", "url": url})
+    return JSONResponse({"ok": True, "url": url})
+
+
+@app.post("/api/git-push-direct")
+async def git_push_direct(payload: dict):
+    repo_name = payload.get("repo_name","")
+    token = payload.get("token","")
+    username = payload.get("username","Stuwish1")
+    if not repo_name or not token:
+        return JSONResponse({"ok": False, "error": "repo_name och token kravs"}, status_code=400)
+    rd = Path(".").resolve()
+    err = None
+    try:
+        remote_url = f"https://{username}:{token}@github.com/{username}/{repo_name}.git"
+        subprocess.run(["git","remote","set-url","origin",remote_url], cwd=rd, check=True, capture_output=True)
+        subprocess.run(["git","add","-A"], cwd=rd, check=True, capture_output=True)
+        subprocess.run(["git","commit","--allow-empty","-m","chore: Ishoo Creator push"], cwd=rd, capture_output=True)
+        subprocess.run(["git","push","origin","HEAD"], cwd=rd, check=True, capture_output=True)
+    except subprocess.CalledProcessError as e:
+        err = e.stderr.decode(errors="ignore")[:300] if e.stderr else str(e)
+    except Exception as e:
+        err = str(e)
+    if err:
+        return JSONResponse({"ok": False, "error": err})
+    await manager.broadcast({"type": "git_push_done", "url": f"https://github.com/{username}/{repo_name}"})
+    return JSONResponse({"ok": True, "url": f"https://github.com/{username}/{repo_name}"})
 
 
 # ─── Startup: hot-reload file watcher ────────────────────────────────────────
@@ -2130,9 +2516,10 @@ if __name__ == "__main__":
     s = load_settings()
     has_key = "OK" if s.get("api_key") else "SAKNAS"
     has_gh  = "OK" if s.get("github_token") else "Saknas"
-    print(f"\n{'='*55}\n  Ishoo Creator\n  Oppna: http://localhost:8000\n{'='*55}")
+    sep = "=" * 55
+    print(f"\n{sep}\n  Ishoo Creator\n  Oppna: http://localhost:8000\n{sep}")
     print(f"  API-nyckel:   {has_key}")
     print(f"  GitHub token: {has_gh}")
-    print(f"  Agenter:      {len(s.get('agents', DEFAULT_AGENTS))}")
-    print(f"{'='*55}\n")
+    print(f"  Agenter:      {len(s.get('agents', []))}")
+    print(f"{sep}\n")
     uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=True)
