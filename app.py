@@ -1327,6 +1327,8 @@ async def set_active(payload: dict):
 
 @app.delete("/api/projects/{project_id}")
 async def delete_project(project_id: str):
+    if project_id == "ishoo-creator":
+        return JSONResponse({"ok": False, "error": "Grundprojektet kan inte tas bort."}, status_code=403)
     data=load_projects(); data["projects"]=[p for p in data["projects"] if p["id"]!=project_id]
     if data["active"]==project_id: data["active"]=data["projects"][0]["id"] if data["projects"] else None
     save_projects(data); return JSONResponse({"ok":True})
@@ -1424,8 +1426,12 @@ async def review_feature(payload: dict):
     spec_obj = payload.get("spec_obj", {})
     proj = get_active_project()
     if not proj:
-        return JSONResponse({"approved": False})
+        return JSONResponse({"approved": False, "error": "Inget aktivt projekt"}, status_code=400)
     s = load_settings()
+    if not s.get("api_key"):
+        await manager.broadcast({"type": "pipeline_done", "success": False, "feature": feature_name,
+            "reason": "⚠️ Anthropic API-nyckel saknas — gå till ⚙️ Inställningar och lägg in nyckeln."})
+        return JSONResponse({"approved": False, "error": "API-nyckel saknas"}, status_code=400)
     memory = load_memory(proj["id"])
     spec_str = json.dumps(spec_obj, ensure_ascii=False) if spec_obj else feature_name
     loop = asyncio.get_event_loop()
@@ -2403,7 +2409,8 @@ async def system_health():
         results["git"] = {"ok": r.returncode==0, "status": r.stdout.strip() if r.returncode==0 else "Ej installerat", "detail": ""}
     except Exception as ex:
         results["git"] = {"ok": False, "status": "Ej installerat", "detail": str(ex)}
-    return JSONResponse(results)
+    all_ok = all(v.get("ok", False) for v in results.values())
+    return JSONResponse({"ok": all_ok, "checks": results})
 
 
 @app.post("/api/git-push")
@@ -2505,21 +2512,11 @@ async def start_file_watcher():
                 mtime = html_path.stat().st_mtime
                 if mtime != last_mtime:
                     last_mtime = mtime
-                    await manager.broadcast({"type": "hot_reload", "file": "index.html"})
+                    await manager.broadcast({"type": "reload"})
             except Exception:
                 pass
-    asyncio.create_task(_watch())
-
+    asyncio.ensure_future(_watch())
 
 if __name__ == "__main__":
     import uvicorn
-    s = load_settings()
-    has_key = "OK" if s.get("api_key") else "SAKNAS"
-    has_gh  = "OK" if s.get("github_token") else "Saknas"
-    sep = "=" * 55
-    print(f"\n{sep}\n  Ishoo Creator\n  Oppna: http://localhost:8000\n{sep}")
-    print(f"  API-nyckel:   {has_key}")
-    print(f"  GitHub token: {has_gh}")
-    print(f"  Agenter:      {len(s.get('agents', []))}")
-    print(f"{sep}\n")
-    uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=False)

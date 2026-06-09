@@ -992,7 +992,7 @@ function renderProjects(data){
   el.innerHTML=data.projects.map(p=>`
     <div class="project-item ${p.id===data.active?'active':''}" onclick="switchProject('${p.id}')">
       <div style="flex:1;min-width:0;"><div class="p-name">${p.name}</div><div class="p-sub">${p.description||p.github||''}</div></div>
-      <button class="del-btn" onclick="event.stopPropagation();deleteProject('${p.id}')">×</button>
+      ${p.id==='ishoo-creator'?'<span style="font-size:10px;color:var(--muted);opacity:.5;padding:2px 4px;" title="Grundprojektet kan inte tas bort">🔒</span>':`<button class="del-btn" onclick="event.stopPropagation();deleteProject('${p.id}')">×</button>`}
     </div>`).join('');
 }
 
@@ -1004,7 +1004,7 @@ async function switchProject(id){
   addMsg('assistant','Projekt bytt! Berätta vad du vill bygga.');loadAll();loadArch();
 }
 
-async function deleteProject(id){if(!confirm('Ta bort projektet?'))return;await fetch(`${API}/api/projects/${id}`,{method:'DELETE'});loadAll();}
+async function deleteProject(id){if(id==='ishoo-creator'){alert('Ishoo Creator är grundprojektet och kan inte tas bort.');return;}if(!confirm('Ta bort projektet?'))return;await fetch(`${API}/api/projects/${id}`,{method:'DELETE'});loadAll();}
 
 function setPhase(ph,btn){
   phaseFilter=ph;
@@ -1358,7 +1358,12 @@ function handleAction2(){if(confirm('Avvisa?')){hideActionBar();addMsg('assistan
 async function startReview(){
   if(!currentFeature)return;
   document.getElementById('actionBtn1').disabled=true;
-  addMsg('assistant',`📋 **Spec-granskaren** kontrollerar att "${currentFeature}" är tillräckligt tydlig...`);
+  document.getElementById('actionBtn1').textContent='⏳ Förbereder...';
+
+  // Visa alla agenter direkt i "Väntar"-läge så användaren ser att något händer
+  renderAgents([]);
+  setProgress(2,'Spec-granskaren kontrollerar...');
+
   try{
     const sr=await fetch(`${API}/api/spec-review`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({spec:currentSpecObj})});
     const specRes=await sr.json();
@@ -1367,14 +1372,28 @@ async function startReview(){
       const fs=specRes.forslag?`\n\n💡 **Förslag:** ${specRes.forslag}`:'';
       addMsg('assistant',`⚠️ **Spec-granskaren: OTYDLIG**\n\nFör att undvika att Snickaren bygger fel sak, svara på:\n${fq}${fs}`);
       document.getElementById('actionBtn1').disabled=false;
+      document.getElementById('actionBtn1').textContent='▶ Starta granskning';
+      setProgress(0,'Väntar...');
       showActionBar('pending_review',currentFeature);
       return;
     }
-    addMsg('assistant',`✅ Spec-granskaren: specen är tydlig — startar agenterna...`);
-  }catch(e){/* om spec-review misslyckas, kör ändå */}
+    setProgress(5,'Spec OK — startar agenter...');
+  }catch(e){
+    setProgress(5,'Startar agenter...');
+  }
   hideActionBar();
-  await fetch(`${API}/api/review`,{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({feature_name:currentFeature,spec_obj:currentSpecObj})});
+  try{
+    const r=await fetch(`${API}/api/review`,{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({feature_name:currentFeature,spec_obj:currentSpecObj})});
+    if(!r.ok){
+      const err=await r.text();
+      addMsg('assistant',`⚠️ Kunde inte starta granskning: ${r.status} ${err.slice(0,200)}`);
+      setProgress(0,'Fel vid start');
+    }
+  }catch(e){
+    addMsg('assistant',`⚠️ Servern svarar inte — kör app.py? Fel: ${e.message}`);
+    setProgress(0,'Anslutningsfel');
+  }
 }
 
 async function startBuild(){
@@ -1898,11 +1917,14 @@ function editArch(){
 
 function renderAgents(agents){
   currentAgents=agents.length?agents:[
-    {id:'security',name:'🔒 Säkerhetsansvarig'},{id:'dba',name:'🗄️ DBA'},
-    {id:'conflict',name:'🔍 Konfliktgranskare'},{id:'ux',name:'🎨 UX + Buggletare'},
-    {id:'architect',name:'🏗️ Arkitektur'},{id:'inspector',name:'✅ Besiktningsman'},
-    {id:'business-logic',name:'🧠 Affärslogik'},{id:'test-generator',name:'🧪 Testgranskare'},
-    {id:'performance',name:'⚡ Prestandagranskare'},{id:'mobile-ux',name:'📱 Mobil/Fält'},
+    {id:'kravanalytiker',name:'🔍 Kravanalytikorn'},{id:'beroendeanalytiker',name:'🔗 Beroendeanalytikorn'},
+    {id:'strukturnavigator',name:'🗺️ Strukturnavigatorn'},{id:'security',name:'🔒 Säkerhetsansvarig'},
+    {id:'dba',name:'🗄️ DBA'},{id:'architect',name:'🏗️ Arkitekt'},
+    {id:'ansvarsfordelning',name:'⚖️ Ansvarsfördelning'},{id:'typgranskare',name:'🔷 Typgranskaren'},
+    {id:'felhantering',name:'🚨 Felhanteringsgranskaren'},{id:'tillganglighet',name:'♿ Tillgänglighetsgranskaren'},
+    {id:'konfiguration',name:'⚙️ Konfigurationsgranskaren'},{id:'performance',name:'⚡ Prestanda'},
+    {id:'ux',name:'🎨 UX-granskare'},{id:'mobile',name:'📱 Mobil/Fält'},
+    {id:'tester',name:'🧪 Testbarhet'},{id:'inspector',name:'✅ Besiktningsman'},
   ];
   document.getElementById('agentList').innerHTML=currentAgents.map(a=>`
     <div class="agent-row" id="row-${a.id}">

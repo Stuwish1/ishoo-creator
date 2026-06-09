@@ -1,1 +1,118 @@
-[]
+[
+  {
+    "id": 1,
+    "name": "Clipboard Image Input",
+    "phase": "MVP",
+    "status": "Blockerad",
+    "spec": {
+      "name": "Clipboard Image Input",
+      "phase": "MVP",
+      "problem": "Användaren kan inte visa Projektledaren hur något ser ut visuellt — måste beskriva allt i text vilket är ineffektivt och oprecist.",
+      "solution": "Ctrl+V i chat-inputen fångar upp bilder från clipboard, visar en förhandsgranskning i chatten, och skickar bilden som base64 (vision API) tillsammans med textmeddelandet till Claude Projektledaren.",
+      "users": "Ishoo Creator-användaren (byggaren) som vill visa UI-problem, design eller skärmdumpar direkt i chatten",
+      "acceptance_criteria": [
+        "Ctrl+V i chat-inputen fångar bild från clipboard och visar miniatyr-preview ovanför inputfältet",
+        "Bilden skickas som base64 image/png (eller jpeg) med vision-stöd i /api/chat anropet",
+        "Claude Projektledaren tar emot och analyserar bilden som visuell kontext",
+        "X-knapp på preview tar bort bilden innan skickning",
+        "Fungerar med skärmdumpar (PNG) och klistrade bilder (JPEG)"
+      ],
+      "dependencies": [
+        "claude-sonnet-4-6 vision API (redan konfigurerat)"
+      ],
+      "risks": [
+        "Clipboard API kräver HTTPS eller localhost — OK i dev",
+        "Stora bilder kan ge stora payloads — begränsa till max 5MB"
+      ]
+    },
+    "created": "2026-06-09T02:09:52.573522"
+  },
+  {
+    "id": 2,
+    "name": "Clipboard Image Input: Fixa duplicerad git_push_direct endpoint",
+    "phase": "MVP",
+    "status": "Planerad",
+    "parent_feature": "Clipboard Image Input",
+    "spec": {
+      "name": "Clipboard Image Input: Fixa duplicerad git_push_direct endpoint",
+      "description": "I app.py: hitta de två @app.post-deklarationerna för git_push_direct (rad 2445 och rad 2471). Jämför implementationerna och behåll den senaste/mest kompletta (rad 2471+). Ta bort hela det första blocket (rad 2445-2469 inklusive decorator och funktionskropp). Spara filen med Python direct write eftersom filen är >50KB. Verifiera att exakt EN definition av git_push_direct finns kvar.",
+      "beroende_av": []
+    },
+    "created": "2026-06-09T02:12:22.958259"
+  },
+  {
+    "id": 3,
+    "name": "Clipboard Image Input: Komplettera spec med Vision API payload-format",
+    "phase": "MVP",
+    "status": "Planerad",
+    "parent_feature": "Clipboard Image Input",
+    "spec": {
+      "name": "Clipboard Image Input: Komplettera spec med Vision API payload-format",
+      "description": "Användaren måste godkänna följande spec-tillägg innan bygget startar: (1) Frontend skickar POST /api/chat med body: {message: string, images: [{data: '<base64-sträng utan data:image prefix>', media_type: 'image/png' | 'image/jpeg'}]}. (2) Backend i /api/chat bygger Anthropic message med content-array: [{type:'image', source:{type:'base64', media_type:..., data:...}}, {type:'text', text:...}] om images finns, annars vanlig text-sträng. (3) Ny Ctrl+V ersätter befintlig bild (max 1 bild åt gången). (4) Filstorleksvalidering på klienten: >5MB → felmeddelande, avvisa. (5) Nekad Clipboard API → visa 'Clipboard-åtkomst nekad' i chat.",
+      "beroende_av": [
+        "Clipboard Image Input: Fixa duplicerad git_push_direct endpoint"
+      ]
+    },
+    "created": "2026-06-09T02:12:22.958294"
+  },
+  {
+    "id": 4,
+    "name": "Clipboard Image Input: Implementera Clipboard Image Input — frontend (index.html)",
+    "phase": "MVP",
+    "status": "Planerad",
+    "parent_feature": "Clipboard Image Input",
+    "spec": {
+      "name": "Clipboard Image Input: Implementera Clipboard Image Input — frontend (index.html)",
+      "description": "I index.html: (1) Lägg till paste event-listener på chat-input elementet som fångar ClipboardEvent med items av type image/*. (2) Konvertera blob till base64 via FileReader.readAsDataURL, strippa 'data:image/xxx;base64,' prefix och spara {data, media_type} i en modul-variabel currentClipboardImage. (3) Visa miniatyr (56x56px) i .chat-img-previews containern (HTML och CSS finns redan). (4) X-knapp på preview sätter currentClipboardImage = null och gömmer preview. (5) Ny Ctrl+V-bild ersätter befintlig. (6) Validera storlek: blob.size > 5*1024*1024 → addMsg('assistant','❌ Bilden är för stor (max 5MB)') + return. (7) Om clipboard-access ger NotAllowedError → addMsg('assistant','❌ Clipboard-åtkomst nekad'). (8) I sendMessage(): om currentClipboardImage finns, inkludera images: [currentClipboardImage] i fetch-body till /api/chat. Rensa currentClipboardImage efter skickning. Filen är >50KB — använd Python direct write.",
+      "beroende_av": [
+        "Clipboard Image Input: Komplettera spec med Vision API payload-format"
+      ]
+    },
+    "created": "2026-06-09T02:12:22.958297"
+  },
+  {
+    "id": 5,
+    "name": "Clipboard Image Input: Implementera Clipboard Image Input — backend (app.py)",
+    "phase": "MVP",
+    "status": "Planerad",
+    "parent_feature": "Clipboard Image Input",
+    "spec": {
+      "name": "Clipboard Image Input: Implementera Clipboard Image Input — backend (app.py)",
+      "description": "I app.py, i /api/chat endpointen (rad ~1390): (1) Lägg till images: list = [] i payload-parametrarna (eller läs från request body dict). (2) Om images-listan är tom: bygg meddelande som idag (text-sträng). (3) Om images är icke-tom: bygg content-array: för varje image lägg till {type:'image', source:{type:'base64', media_type: image['media_type'], data: image['data']}} följt av {type:'text', text: user_message}. (4) Skicka till Anthropic med detta content-array istället för text-sträng. (5) Serversidans validering: om image['data'] base64-dekodad längd > 5MB → returnera JSONResponse({'error':'Bilden är för stor'}, status_code=400). Filen är >50KB — använd Python direct write.",
+      "beroende_av": [
+        "Clipboard Image Input: Komplettera spec med Vision API payload-format"
+      ]
+    },
+    "created": "2026-06-09T02:12:22.958299"
+  },
+  {
+    "id": 6,
+    "name": "Clipboard Image Input",
+    "phase": "MVP",
+    "status": "Planerad",
+    "spec": {
+      "name": "Clipboard Image Input",
+      "phase": "MVP",
+      "problem": "Chatboxen hanterar inte Ctrl+V korrekt — text klistras inte in, bilder klistras inte in. Användaren kan inte bifoga skärmdumpar eller kodbilder till sin förfrågan till Projektledaren.",
+      "solution": "Gör chatboxen till ett riktigt clipboard-aware inmatningsfält: Ctrl+V klistrar in text som vanligt, Ctrl+V med bild i clipboard fångas och visas som förhandsvisning. Drag & drop av en eller flera bildfiler stöds. Varje bild kan tas bort individuellt. Vid send skickas bilderna som base64 vision-payload till Claude API.",
+      "users": "Utvecklare som använder Ishoo Creator lokalt och vill klistra in skärmdumpar, wireframes eller felmeddelanden som bilder direkt i chatten",
+      "acceptance_criteria": [
+        "Ctrl+V i textarea klistrar in vanlig text som normalt (standard beteende)",
+        "Ctrl+V när clipboard innehåller en bild skapar en förhandsvisning under textarea — fungerar även om textarea inte är fokuserad (window-level paste listener)",
+        "Drag & drop av 1–5 bilder på chatboxen lägger till förhandsvisningar",
+        "Varje bild i förhandsvisningen har en ✕-knapp för att ta bort den",
+        "Vid sendMessage() skickas bifogade bilder som base64 image-payload i Claude API-anropet (anthropic vision format: type=image, source.type=base64)",
+        "Max 5 bilder per meddelande — överskott ignoreras med toast-notis",
+        "Bilderna rensas automatiskt efter att meddelandet skickats"
+      ],
+      "dependencies": [
+        "Anthropic Claude API vision support (claude-sonnet-4-6 stöder detta)"
+      ],
+      "risks": [
+        "Stora bilder kan göra API-anropet långsamt — begränsa till max 2MB per bild med varning",
+        "app.py har duplicerad git_push_direct endpoint (rad 2448 och 2474) — måste fixas innan push av nya ändringar"
+      ]
+    },
+    "created": "2026-06-09T02:14:13.782417"
+  }
+]
