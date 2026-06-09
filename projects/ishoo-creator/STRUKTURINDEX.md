@@ -1,9 +1,10 @@
 # STRUKTURINDEX
-Uppdaterad: 2026-06-09 12:50
+Uppdaterad: 2026-06-09 12:59
 
 ## Filstruktur
 ```
-app.py  (151kb)
+STRUKTURINDEX.md  (9kb)
+app.py  (154kb)
 fix_duplicate.py  (3kb)
 git_setup.py  (3kb)
 index.html  (152kb)
@@ -12,12 +13,13 @@ projects/
   innob-bygg/
     project_settings.json  (157b)
   ishoo-creator/
-    features.json  (30kb)
+    STRUKTURINDEX.md  (9kb)
+    features.json  (1kb)
     memory/
       ARCHITECTURE.md  (3kb)
       CLAUDE.md  (2kb)
       DECISIONS.md  (1014b)
-      FEATURES.md  (1kb)
+      FEATURES.md  (228b)
       PATTERNS.md  (2kb)
       SCHEMA.md  (1kb)
     project_settings.json  (152b)
@@ -29,7 +31,7 @@ settings.json  (388b)
 
 ### app.py
 ```
-  [3128 rader]
+  [3197 rader]
   r17: # ─── Dev Server State ───────────────────────────────────────────────
   r36: # ─── Settings ───────────────────────────────────────────────────────
   r83: REGLER Python/FastAPI: endpoints i app.py under rätt # ─── sektion, ag
@@ -74,157 +76,157 @@ settings.json  (388b)
   r832: # ─── Agenter ────────────────────────────────────────────────────────
   r834: def get_agents_from_settings
   r843: def _gather_live_context
-  r1001: # ─── Domare — aktiveras efter max_iter misslyckanden ────────────────
-  r1017: # ─── Post-build agenter (kör automatiskt efter varje bygge) ─────────
-  r1072: def parse_fraga
-  r1093: def parse_feature_klar
-  r1102: def parse_system_klar
-  r1112: def phases_summary
-  r1120: def _ollama_available
-  r1127: def run_agent_ollama
-  r1158: def _parse_json_robust
-  r1189: def run_agent
-  r1221: @app.post
-  r1222: async def apply_system_config
-  r1252: # ─── WebSocket ──────────────────────────────────────────────────────
+  r1070: # ─── Domare — aktiveras efter max_iter misslyckanden ────────────────
+  r1086: # ─── Post-build agenter (kör automatiskt efter varje bygge) ─────────
+  r1141: def parse_fraga
+  r1162: def parse_feature_klar
+  r1171: def parse_system_klar
+  r1181: def phases_summary
+  r1189: def _ollama_available
+  r1196: def run_agent_ollama
+  r1227: def _parse_json_robust
+  r1258: def run_agent
+  r1290: @app.post
+  r1291: async def apply_system_config
+  r1321: # ─── WebSocket ──────────────────────────────────────────────────────
 
-  r1254: class ConnectionManager
-    r1255: def __init__
-    r1256: async def connect
-    r1257: def disconnect
-    r1258: async def broadcast
-  r1267: # ─── API ────────────────────────────────────────────────────────────
-  r1269: @app.get
-  r1270: async def root
-  r1273: @app.get
-  r1274: async def get_settings_api
-  r1282: @app.post
-  r1283: async def save_settings_api
-  r1295: @app.get
-  r1296: async def get_agents
-  r1299: @app.post
-  r1300: async def create_agent
-  r1309: @app.put
-  r1310: async def update_agent
-  r1319: @app.delete
-  r1320: async def delete_agent
-  r1326: @app.get
-  r1327: async def get_projects
-  r1329: @app.post
-  r1330: async def create_project
-  r1365: @app.put
-  r1366: async def set_active
-  r1371: @app.delete
-  r1372: async def delete_project
-  r1379: @app.get
-  r1380: async def get_project_settings
-  r1383: @app.post
-  r1384: async def update_project_settings
-  r1398: @app.get
-  r1399: async def get_features
-  r1402: @app.post
-  r1403: async def explain_backlog
-  r1442: @app.delete
-  r1443: async def delete_feature
-  r1474: @app.post
-  r1475: async def chat
-  r1508: @app.post
-  r1509: async def review_feature
-    r1552: def ctx_for
-    r1673: def is_fp
-    r1676: def fp_overlap_with_spec
-  r1803: @app.post
-  r1804: async def build_feature
-  r1825: async def _run_inspector_post_build
-  r1882: def build_code_sync
-  r1887: @app.post
-  r1888: async def push_feature
-    r1904: async def _regen_arch
-    r1931: async def _regen_index
-  r1947: @app.post
-  r1948: async def rebuild_strukturindex
-  r1963: # ─── Vercel Preview ─────────────────────────────────────────────────
-  r1965: @app.get
-  r1966: async def get_preview
-    r1984: def fetch_latest_deployment
-    r2003: def fetch_prod_deployment
-  r2026: @app.websocket
-  r2027: async def ws_endpoint
-  r2033: # ─── Feature Queue ──────────────────────────────────────────────────
-  r2035: def load_queue
-  r2039: def save_queue
-  r2043: @app.get
-  r2044: async def get_queue
-  r2048: @app.post
-  r2049: async def add_to_queue
-  r2061: @app.delete
-  r2062: async def remove_from_queue
-  r2069: @app.put
-  r2070: async def reorder_queue
-  r2076: # ─── Feature Suggestions ────────────────────────────────────────────
-  r2090: @app.post
-  r2091: async def get_suggestions
-  r2111: # ─── Architecture Map ───────────────────────────────────────────────
-  r2113: def load_architecture
-  r2117: def save_architecture
-  r2120: def update_features_md
-  r2172: @app.post
-  r2173: async def onboard_project
-  r2223: @app.get
-  r2224: async def get_architecture
-  r2229: @app.post
-  r2230: async def update_architecture
-  r2236: @app.post
-  r2237: async def generate_architecture
-  r2269: # ─── Lokal Dev Server ───────────────────────────────────────────────
-  r2271: @app.post
-  r2272: async def start_dev_server
-  r2294: @app.post
-  r2295: async def stop_dev_server
-  r2312: @app.get
-  r2313: async def dev_server_status
-  r2319: # ─── Felklistraren — auto-fix error ─────────────────────────────────
-  r2332: @app.post
-  r2333: async def fix_error
-  r2364: # ─── Versionshistorik & Revert ──────────────────────────────────────
-  r2366: @app.get
-  r2367: async def git_log
-  r2382: @app.get
-  r2383: async def git_status
+  r1323: class ConnectionManager
+    r1324: def __init__
+    r1325: async def connect
+    r1326: def disconnect
+    r1327: async def broadcast
+  r1336: # ─── API ────────────────────────────────────────────────────────────
+  r1338: @app.get
+  r1339: async def root
+  r1342: @app.get
+  r1343: async def get_settings_api
+  r1351: @app.post
+  r1352: async def save_settings_api
+  r1364: @app.get
+  r1365: async def get_agents
+  r1368: @app.post
+  r1369: async def create_agent
+  r1378: @app.put
+  r1379: async def update_agent
+  r1388: @app.delete
+  r1389: async def delete_agent
+  r1395: @app.get
+  r1396: async def get_projects
+  r1398: @app.post
+  r1399: async def create_project
+  r1434: @app.put
+  r1435: async def set_active
+  r1440: @app.delete
+  r1441: async def delete_project
+  r1448: @app.get
+  r1449: async def get_project_settings
+  r1452: @app.post
+  r1453: async def update_project_settings
+  r1467: @app.get
+  r1468: async def get_features
+  r1471: @app.post
+  r1472: async def explain_backlog
+  r1511: @app.delete
+  r1512: async def delete_feature
+  r1543: @app.post
+  r1544: async def chat
+  r1577: @app.post
+  r1578: async def review_feature
+    r1621: def ctx_for
+    r1742: def is_fp
+    r1745: def fp_overlap_with_spec
+  r1872: @app.post
+  r1873: async def build_feature
+  r1894: async def _run_inspector_post_build
+  r1951: def build_code_sync
+  r1956: @app.post
+  r1957: async def push_feature
+    r1973: async def _regen_arch
+    r2000: async def _regen_index
+  r2016: @app.post
+  r2017: async def rebuild_strukturindex
+  r2032: # ─── Vercel Preview ─────────────────────────────────────────────────
+  r2034: @app.get
+  r2035: async def get_preview
+    r2053: def fetch_latest_deployment
+    r2072: def fetch_prod_deployment
+  r2095: @app.websocket
+  r2096: async def ws_endpoint
+  r2102: # ─── Feature Queue ──────────────────────────────────────────────────
+  r2104: def load_queue
+  r2108: def save_queue
+  r2112: @app.get
+  r2113: async def get_queue
+  r2117: @app.post
+  r2118: async def add_to_queue
+  r2130: @app.delete
+  r2131: async def remove_from_queue
+  r2138: @app.put
+  r2139: async def reorder_queue
+  r2145: # ─── Feature Suggestions ────────────────────────────────────────────
+  r2159: @app.post
+  r2160: async def get_suggestions
+  r2180: # ─── Architecture Map ───────────────────────────────────────────────
+  r2182: def load_architecture
+  r2186: def save_architecture
+  r2189: def update_features_md
+  r2241: @app.post
+  r2242: async def onboard_project
+  r2292: @app.get
+  r2293: async def get_architecture
+  r2298: @app.post
+  r2299: async def update_architecture
+  r2305: @app.post
+  r2306: async def generate_architecture
+  r2338: # ─── Lokal Dev Server ───────────────────────────────────────────────
+  r2340: @app.post
+  r2341: async def start_dev_server
+  r2363: @app.post
+  r2364: async def stop_dev_server
+  r2381: @app.get
+  r2382: async def dev_server_status
+  r2388: # ─── Felklistraren — auto-fix error ─────────────────────────────────
   r2401: @app.post
-  r2402: async def git_revert
-  r2421: @app.get
-  r2422: async def ollama_status
-  r2435: # ─── Konsultation — agenter som rena konsulter (aldrig blockerande) ─
-  r2453: @app.post
-  r2454: async def consult_feature
-  r2569: # ─── Spec-granskare ─────────────────────────────────────────────────
-  r2586: @app.post
-  r2587: async def spec_review
-  r2611: # ─── Build Verification Loop ────────────────────────────────────────
-  r2613: def run_npm_build
-  r2651: @app.post
-  r2652: async def build_verify
-  r2771: # ─── System Health Check ────────────────────────────────────────────
-  r2773: @app.get
-  r2774: async def system_health
-  r2820: @app.post
-  r2821: async def git_push_simple
-  r2855: @app.post
-  r2856: async def git_push_direct
-  r2891: def _read_project_files
-  r2926: @app.post
-  r2927: async def code_iterator
-  r2942: async def _run_code_iterator_bg
-  r3076: @app.get
-  r3077: async def get_arch_by_pid
-  r3081: @app.put
-  r3082: async def save_arch_by_pid
-  r3087: @app.post
-  r3088: async def generate_arch_by_pid
-  r3108: @app.on_event
-  r3109: async def start_file_watcher
-    r3110: async def _watch
+  r2402: async def fix_error
+  r2433: # ─── Versionshistorik & Revert ──────────────────────────────────────
+  r2435: @app.get
+  r2436: async def git_log
+  r2451: @app.get
+  r2452: async def git_status
+  r2470: @app.post
+  r2471: async def git_revert
+  r2490: @app.get
+  r2491: async def ollama_status
+  r2504: # ─── Konsultation — agenter som rena konsulter (aldrig blockerande) ─
+  r2522: @app.post
+  r2523: async def consult_feature
+  r2638: # ─── Spec-granskare ─────────────────────────────────────────────────
+  r2655: @app.post
+  r2656: async def spec_review
+  r2680: # ─── Build Verification Loop ────────────────────────────────────────
+  r2682: def run_npm_build
+  r2720: @app.post
+  r2721: async def build_verify
+  r2840: # ─── System Health Check ────────────────────────────────────────────
+  r2842: @app.get
+  r2843: async def system_health
+  r2889: @app.post
+  r2890: async def git_push_simple
+  r2924: @app.post
+  r2925: async def git_push_direct
+  r2960: def _read_project_files
+  r2995: @app.post
+  r2996: async def code_iterator
+  r3011: async def _run_code_iterator_bg
+  r3145: @app.get
+  r3146: async def get_arch_by_pid
+  r3150: @app.put
+  r3151: async def save_arch_by_pid
+  r3156: @app.post
+  r3157: async def generate_arch_by_pid
+  r3177: @app.on_event
+  r3178: async def start_file_watcher
+    r3179: async def _watch
 ```
 
 ### fix_duplicate.py

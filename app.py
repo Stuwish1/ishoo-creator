@@ -660,23 +660,28 @@ def generate_diff_text(old_content: str, new_content: str, filename: str) -> lis
         else:                      lines.append({"type":"ctx","content":line[1:].rstrip('\n') if line.startswith(' ') else line.rstrip('\n')})
     return lines
 
-SNICKARE_PROMPT = """Du är en expert React/TypeScript/Supabase-utvecklare — "snickaren".
+SNICKARE_PROMPT = """Du är Snickaren — expert på att bygga kod och modifiera filer.
 Du får en feature-spec och befintlig kodbas.
 
 REGLER:
-- Skriv korrekt TypeScript med types
-- Använd shadcn/ui och Tailwind CSS för UI
-- Supabase-anrop: använd import.meta.env.VITE_SUPABASE_URL och VITE_SUPABASE_ANON_KEY (aldrig hårdkoda URLs)
-- Skapa eller modifiera minsta möjliga antal filer
-- Inga TODO-kommentarer — skriv färdig kod
-- Returnera EXAKT detta JSON:
+- Skriv komplett, körbar kod — inga TODO-kommentarer
+- Modifiera minsta möjliga antal filer
+- För Python/FastAPI-projekt: skriv Python. För React/TypeScript: skriv TypeScript. Matcha projektet.
+- Returnera EXAKT detta XML-format — inget annat:
 
-{
-  "summary": "Kort beskrivning",
-  "files": [
-    {"path":"src/...", "action":"create"/"modify"/"delete", "content":"...", "description":"..."}
-  ]
-}"""
+<response>
+<summary>Kort beskrivning av vad som gjordes</summary>
+<file>
+  <path>relativ/sökväg/till/fil.py</path>
+  <action>create</action>
+  <description>Vad filen gör</description>
+  <content>
+HELA FILINNEHÅLLET HÄR — komplett, körbart
+  </content>
+</file>
+</response>
+
+KRITISKT: <content> måste innehålla HELA filinnehållet. Aldrig tomt. action = create/modify/delete."""
 
 async def build_code(spec: dict, pid: str) -> tuple[list, str]:
     s = load_settings()
@@ -686,18 +691,36 @@ async def build_code(spec: dict, pid: str) -> tuple[list, str]:
     if not proj or not proj.get("github"): return [], "Inget GitHub-repo kopplat."
     if is_self_project(pid):
         rd = effective_repo_dir(pid)
-        # Ishoo Creator: ge Snickaren full strukturell kontext om sina egna filer
-        ctx_parts = []
+        # Ishoo Creator: Python/HTML projekt — ge Snickaren rätt kontext
+        ctx_parts = ["PROJEKTTYP: Python/FastAPI backend (app.py) + vanilla HTML/JS frontend (index.html). INTE React/TypeScript."]
         for fname in ["app.py", "index.html"]:
             fp = rd / fname
             if fp.exists():
                 raw = fp.read_text(encoding="utf-8", errors="ignore")
                 idx = build_file_index(fp)
-                # Ge index + full fil (Snickaren behöver se allt för att skriva korrekt kod)
                 ctx_parts.append(
                     f"=== {fname} — INDEX ===\n{idx}\n\n"
                     f"=== {fname} — FULL KOD ({len(raw.splitlines())} rader) ===\n{raw}"
                 )
+        # Inkludera även JSON-datafiler om spec nämner dem
+        spec_text_lower = json.dumps(spec, ensure_ascii=False).lower()
+        data_files = ["features.json", "settings.json", "memory.md"]
+        for data_fname in data_files:
+            if any(kw in spec_text_lower for kw in [data_fname.split(".")[0], data_fname]):
+                # Sök i projects-mappen
+                import glob as _glob
+                matches = list(_glob.glob(str(rd / "**" / data_fname), recursive=True))
+                if not matches:
+                    proj_data = project_dir(pid) / data_fname
+                    if proj_data.exists():
+                        matches = [str(proj_data)]
+                for m in matches[:1]:
+                    try:
+                        data_content = Path(m).read_text(encoding="utf-8", errors="ignore")
+                        rel = Path(m).relative_to(rd) if Path(m).is_relative_to(rd) else Path(m)
+                        ctx_parts.append(f"=== {rel} (datafil) ===\n{data_content[:3000]}")
+                    except Exception:
+                        pass
         context = "\n\n".join(ctx_parts) if ctx_parts else "Inga filer hittades."
     else:
         rd, err = clone_or_pull(proj["github"], pid)
@@ -707,7 +730,7 @@ async def build_code(spec: dict, pid: str) -> tuple[list, str]:
     try:
         response = client_inst.messages.create(
             model=model_for("snickare", s), max_tokens=8000, system=SNICKARE_PROMPT,
-            messages=[{"role":"user","content":f"FEATURE-SPEC:\n{spec_text}\n\nBEFINTLIG KODBAS:\n{context}\n\nGenerera koden nu. Returnera ENBART XML-format enligt instruktionen."}])
+            messages=[{"role":"user","content":f"FEATURE-SPEC:\n{spec_text}\n\nBEFINTLIG KODBAS:\n{context}\n\nGenerera koden nu. Returnera ENBART XML med <response><summary>...</summary><file>...</file></response>"}])
         text = response.content[0].text.strip()
         import re as _re
         # Parsa XML-format
@@ -734,6 +757,8 @@ async def build_code(spec: dict, pid: str) -> tuple[list, str]:
                     summary = d2.get("summary", summary)
             except Exception:
                 pass
+        # Rensa filer med tomt content (förhindrar tomma diffs)
+        files = [f for f in files if f.get("content","").strip() or f.get("action") == "delete"]
         if not files:
             # Fallback 2: Direkt kod i svaret
             if any(kw in text for kw in ["def ", "class ", "import ", "function ", "const ", "async "]):

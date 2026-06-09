@@ -40,5 +40,113 @@
       "risks": []
     },
     "created": "2025-01-01T00:00:00.000000"
+  },
+  {
+    "id": 3,
+    "name": "Fixa starta granskning kraschar",
+    "phase": "MVP",
+    "status": "Planerad",
+    "spec": {
+      "name": "Fixa starta granskning kraschar",
+      "phase": "MVP",
+      "problem": "Knappen 'Starta granskning' kraschar när den klickas — blockerar hela review-pipeline och gör systemet oanvändbart",
+      "solution": "Identifiera och fixa root cause i /api/review eller frontend-anropet — troligen ett uncaught exception i agent-loop, WebSocket-event som inte hanteras, eller saknad error handling i startReview()",
+      "users": "Alla användare av Ishoo Creator",
+      "acceptance_criteria": [
+        "Klicka 'Starta granskning' med en feature i kö — ingen krasch, pipeline startar",
+        "Om agent misslyckas visas tydligt felmeddelande i UI (inte tyst krasch)",
+        "WebSocket-events pipeline_start, agent_status, pipeline_done skickas korrekt",
+        "Ollama-fallback till haiku fungerar om Ollama inte svarar"
+      ],
+      "dependencies": [],
+      "risks": [
+        "Felet kan vara i frontend JS, backend Python eller WebSocket-kommunikation — behöver pinpointa exakt"
+      ]
+    },
+    "created": "2026-06-09T13:01:25.613222"
+  },
+  {
+    "id": 4,
+    "name": "Fixa starta granskning kraschar: [Tillgänglighetsgranskaren] Saknade aria-label på interaktiva ikoner: closeDiff(), close",
+    "phase": "Backlog",
+    "status": "Planerad",
+    "spec": {
+      "name": "Fixa starta granskning kraschar: [Tillgänglighetsgranskaren] Saknade aria-label på interaktiva ikoner: closeDiff(), close",
+      "description": "Saknade aria-label på interaktiva ikoner: closeDiff(), closeHealth(), closeSettings() — knapparna har bara '✕' utan label",
+      "källa": "Tillgänglighetsgranskaren"
+    },
+    "created": "2026-06-09T13:02:10.621712"
+  },
+  {
+    "id": 5,
+    "name": "Fixa starta granskning kraschar: [Strukturnavigatorn] STRUKTURINDEX.md finns och är uppdaterad (2026-06-09 12:59)",
+    "phase": "Backlog",
+    "status": "Planerad",
+    "spec": {
+      "name": "Fixa starta granskning kraschar: [Strukturnavigatorn] STRUKTURINDEX.md finns och är uppdaterad (2026-06-09 12:59)",
+      "description": "STRUKTURINDEX.md finns och är uppdaterad (2026-06-09 12:59)",
+      "källa": "Strukturnavigatorn"
+    },
+    "created": "2026-06-09T13:02:10.621721"
+  },
+  {
+    "id": 6,
+    "name": "Fixa starta granskning kraschar: [Mobil/Fält] Touchmål för mobilknappar är för små — 'Starta granskning', ",
+    "phase": "Backlog",
+    "status": "Planerad",
+    "spec": {
+      "name": "Fixa starta granskning kraschar: [Mobil/Fält] Touchmål för mobilknappar är för små — 'Starta granskning', ",
+      "description": "Touchmål för mobilknappar är för små — 'Starta granskning', 'Godkänn & Pusha' är under 44px",
+      "källa": "Mobil/Fält"
+    },
+    "created": "2026-06-09T13:02:10.621724"
+  },
+  {
+    "id": 7,
+    "name": "Fixa starta granskning kraschar: [UX-granskare] Spec saknar fullständig use case - ingen tydlig steg-för-ste",
+    "phase": "Backlog",
+    "status": "Planerad",
+    "spec": {
+      "name": "Fixa starta granskning kraschar: [UX-granskare] Spec saknar fullständig use case - ingen tydlig steg-för-ste",
+      "description": "Spec saknar fullständig use case - ingen tydlig steg-för-steg flöde för hur användaren märker och löser kraschen",
+      "källa": "UX-granskare"
+    },
+    "created": "2026-06-09T13:02:10.621726"
+  },
+  {
+    "id": 8,
+    "name": "Fixa starta granskning kraschar: [Säkerhetsansvarig] settings.json innehåller api_key (sk-ant-...) och github_tok",
+    "phase": "Backlog",
+    "status": "Planerad",
+    "spec": {
+      "name": "Fixa starta granskning kraschar: [Säkerhetsansvarig] settings.json innehåller api_key (sk-ant-...) och github_tok",
+      "description": "settings.json innehåller api_key (sk-ant-...) och github_token (ghp_...) i klartext på disk — om filen läcker exponeras båda nycklarna",
+      "källa": "Säkerhetsansvarig"
+    },
+    "created": "2026-06-09T13:02:10.621729"
+  },
+  {
+    "id": 9,
+    "name": "Fixa starta granskning kraschar: [Ansvarsfördelning] app.py är en God Object på ~3200 rader — innehåller settings",
+    "phase": "Backlog",
+    "status": "Planerad",
+    "spec": {
+      "name": "Fixa starta granskning kraschar: [Ansvarsfördelning] app.py är en God Object på ~3200 rader — innehåller settings",
+      "description": "app.py är en God Object på ~3200 rader — innehåller settings, projekthantering, git, AI-agenter, WebSocket, 40+ endpoints, build-verifiering, dev-server, spec-granskning och filindex i EN fil",
+      "källa": "Ansvarsfördelning"
+    },
+    "created": "2026-06-09T13:02:10.621732"
+  },
+  {
+    "id": 10,
+    "name": "Fixa starta granskning kraschar: [Arkitekt] Monolitisk arkitektur: all affärslogik, datahantering, git-o",
+    "phase": "Backlog",
+    "status": "Planerad",
+    "spec": {
+      "name": "Fixa starta granskning kraschar: [Arkitekt] Monolitisk arkitektur: all affärslogik, datahantering, git-o",
+      "description": "Monolitisk arkitektur: all affärslogik, datahantering, git-operationer, agent-orkestration och API-endpoints bor i en enda fil (app.py ~3200 rader). Detta är ett medvetet arkitekturbeslut (DECISIONS.md) men skapar massiv separation-of-concerns-violation — git-logik, AI-agentlogik, filsystem-operationer och HTTP-routing är inte separerade.",
+      "källa": "Arkitekt"
+    },
+    "created": "2026-06-09T13:02:10.621734"
   }
 ]
