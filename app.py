@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
 """
-Ishoo Creator — Lokal Agent Backend v4 (Settings Edition)
-==========================================================
-Allt konfigurerbart inifrån UI:
-- Settings (API-nycklar, git-info, modeller, max iterationer)
-- Agent CRUD (lägg till / redigera / ta bort agenter)
-- Dev/Prod branch-separation
-- Per-projekt Supabase-konfiguration
-"""
+Ishoo Creator — app.py (FastAPI backend + endpoints)
 
+MODULSTRUKTUR — ändra rätt fil:
+  agents_config.py  → Agent-definitioner, DEFAULT_AGENTS, SNICKARE_PROMPT, PROJEKTLEDARE_PROMPT
+  git_utils.py      → Git-operationer (clone, pull, push, apply_and_push)
+  app.py            → FastAPI routes, WebSocket, pipeline-logik (denna fil)
+
+VIKTIGT FÖR SNICKAREN:
+  - Vill du ändra en agent-prompt? → agents_config.py
+  - Vill du ändra git-hantering?   → git_utils.py
+  - Vill du ändra ett API-endpoint? → app.py (men använd action=patch, INTE hela filen)
+"""
 import os, json, asyncio, re, difflib, subprocess, threading
 from pathlib import Path
 from datetime import datetime
@@ -213,10 +216,19 @@ DEFAULT_SETTINGS = {
     "agents": DEFAULT_AGENTS,
 }
 
+_settings_cache2: dict = {}
+_settings_mtime2: float = 0.0
 def load_settings() -> dict:
+    global _settings_cache2, _settings_mtime2
     stored = {}
     if SETTINGS_FILE.exists():
-        try: stored = json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
+        try:
+            mt = SETTINGS_FILE.stat().st_mtime
+            if mt == _settings_mtime2: return dict(_settings_cache2)
+            stored = json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
+            _settings_mtime2 = mt
+            _settings_cache2 = {**DEFAULT_SETTINGS, **stored}
+            return dict(_settings_cache2)
         except: pass
     s = {**DEFAULT_SETTINGS, **stored}
     # .env overrides for sensitive keys (backwards compat)
@@ -740,7 +752,8 @@ async def build_code(spec: dict, pid: str) -> tuple[list, str]:
         # Ishoo Creator: Python/HTML projekt — ge Snickaren rätt kontext
         ctx_parts = ["PROJEKTTYP: Python/FastAPI backend (app.py) + vanilla HTML/JS frontend (index.html). INTE React/TypeScript."]
         spec_lower_kw = json.dumps(spec, ensure_ascii=False).lower()
-        for fname in ["app.py", "index.html"]:
+        import re as _rp2
+        for fname in ["agents_config.py", "git_utils.py", "app.py", "index.html"]:
             fp = rd / fname
             if fp.exists():
                 raw = fp.read_text(encoding="utf-8", errors="ignore")
@@ -752,7 +765,7 @@ async def build_code(spec: dict, pid: str) -> tuple[list, str]:
                     relevant = []
                     seen = set()
                     for i2, line in enumerate(raw_lines):
-                        if any(kw in line.lower() for kw in kws):
+                        if any(_rp2.search(r'\b' + _rp2.escape(kw) + r'\b', line.lower()) for kw in kws):
                             s2, e2 = max(0,i2-5), min(len(raw_lines),i2+20)
                             key = (s2,e2)
                             if key not in seen:
@@ -792,6 +805,9 @@ async def build_code(spec: dict, pid: str) -> tuple[list, str]:
         rd, err = clone_or_pull(proj["github"], pid)
         if err: return [], err
         context = read_codebase_context(rd, spec)
+    # Trim context om för stor (skyddar mot token-overflow)
+    if len(context) > 60000:
+        context = context[:60000] + "\n\n[KONTEXT TRUNKERAD — för stor]"
     spec_text = json.dumps(spec, ensure_ascii=False, indent=2)
     try:
         response = client_inst.messages.create(
@@ -833,17 +849,26 @@ async def build_code(spec: dict, pid: str) -> tuple[list, str]:
             if not c or len(c) < 10: return False
             return True
         files = [f for f in files if _valid_file(f)]
-        # Avvisa trunkerade filer innan diff visas för användaren
+        # Avvisa trunkerade filer innan diff visas — patch-filer undantagna
         rd_check = effective_repo_dir(pid)
         safe_files = []
         for _f in files:
             _act = _f.get("action","create")
-            if _act in ("delete","patch"):
+            _cw  = _f.get("content","").strip()
+            # Patch och delete behöver inte storlek-check
+            if _act == "delete":
                 safe_files.append(_f); continue
+            # Patch måste ha content men ingen storlek-jämförelse
+            if _act == "patch":
+                if _cw:
+                    safe_files.append(_f)
+                # tom patch hoppas över (Fix #13)
+                continue
+            # Modify/create: avvisa om ny fil är <30% av original
             _fp = rd_check / _f.get("path","")
-            if _fp.exists() and str(_fp).endswith(".py"):
+            if _fp.exists() and str(_fp).endswith((".py",".html",".js")):
                 _orig = len(_fp.read_text(encoding="utf-8", errors="ignore"))
-                _new  = len(_f.get("content",""))
+                _new  = len(_cw)
                 if _orig > 5000 and _new < _orig * 0.3:
                     continue  # trunkerad — hoppa över
             safe_files.append(_f)
@@ -937,7 +962,7 @@ def apply_and_push(pid: str, feature_name: str, env: str = "dev") -> str:
                 _sh_guard.copy2(str(fpath), str(fpath)+".bak")
             prev_size = len(fpath.read_text(encoding="utf-8",errors="ignore")) if fpath.exists() else 0
             # Patch-läge: applicera PATCH-kommenterade funktioner direkt i filen
-            if action == "patch" and fpath.exists() and str(fpath).endswith(".py"):
+            if action == "patch" and cw and fpath.exists() and str(fpath).endswith((".py",".html")):
                 import re as _rp
                 orig = fpath.read_text(encoding="utf-8", errors="ignore")
                 patched = orig
@@ -947,7 +972,10 @@ def apply_and_push(pid: str, feature_name: str, env: str = "dev") -> str:
                     m = _rp.search(r"^(?:async )?def (\w+)", blk, _rp.MULTILINE)
                     if m:
                         fn = m.group(1)
-                        pat = _rp.compile(r"^(?:async )?def " + fn + r"\b.*?(?=^(?:async )?def |\Z)", _rp.MULTILINE | _rp.DOTALL)
+                        # Inkludera dekoratorer (@app.post etc) ovanför funktionen
+                        pat = _rp.compile(
+                            r"(?:^@[^\n]+\n)*^(?:async )?def " + fn + r"\b.*?(?=^(?:@|async def |def )|\Z)",
+                            _rp.MULTILINE | _rp.DOTALL)
                         if pat.search(patched):
                             patched = pat.sub(blk.rstrip() + "\n\n", patched, count=1)
                         else:
@@ -1026,6 +1054,16 @@ def get_agents_from_settings(s: dict = None):
 def _gather_live_context(proj: dict) -> str:
     """Samlar och VERIFIERAR kontext för Projektledaren — fakta, inte påståenden."""
     import subprocess as _sp, ast as _ast, re as _re
+    import signal as _sig
+    # Samlad timeout 8s för hela funktionen
+    class _Timeout(Exception): pass
+    def _alarm(s,f): raise _Timeout()
+    try:
+        import signal as _s2
+        _s2.signal(_s2.SIGALRM, _alarm)
+        _s2.alarm(8)
+    except (AttributeError, OSError):
+        pass  # Windows har inte SIGALRM
     pid = proj["id"]
     rd = effective_repo_dir(pid)
     parts = []
@@ -1127,6 +1165,9 @@ def _gather_live_context(proj: dict) -> str:
     except Exception:
         pass
 
+    try:
+        import signal as _s3; _s3.alarm(0)
+    except (AttributeError, OSError): pass
     return "\n\n".join(parts) if parts else "Ingen kontext tillgänglig."
 
 
@@ -1273,6 +1314,8 @@ _review_cache: dict = {}
 # ── Loop-guard: förhindrar dubbla anrop och pipeline-loopar ──────────────────
 _pipeline_running: dict = {}   # {feature_name: start_timestamp}
 _pipeline_attempts: dict = {}  # {feature_name: antal_försök}
+import threading as _threading
+_pipeline_mutex = _threading.Lock()  # skyddar _pipeline_running/_pipeline_attempts
 MAX_PIPELINE_ATTEMPTS = 3      # Max antal gånger samma feature får köra
 PIPELINE_TIMEOUT_S = 300       # 5 min timeout per körning
 
@@ -1537,7 +1580,9 @@ class ConnectionManager:
         dead = []
         for ws in self.active:
             try: await ws.send_json(data)
-            except: dead.append(ws)
+            except Exception as _e:
+                dead.append(ws)
+                import logging as _log; _log.warning(f"WS fel ({data.get('type','?')}): {_e}")
         for ws in dead: self.active.remove(ws)
 
 manager = ConnectionManager()
@@ -1771,7 +1816,8 @@ async def chat(payload: dict):
     _is_strategic = any(kw in message.lower() for kw in _strategic_kw)
     _max_tok = 3000 if _is_strategic else 1500
     response=client_inst.messages.create(model=model_for("projektledare",s),max_tokens=_max_tok,system=system,
-        messages=history[-16:]+[{"role":"user","content":message}])
+        messages=history[-16:]+[{"role":"user","content":message}],
+        timeout=90.0)
     reply=response.content[0].text
     feature_spec=parse_feature_klar(reply); feature_name=None
     if feature_spec:
@@ -1800,7 +1846,8 @@ async def review_feature(payload: dict):
 
     # ── Loop-guard: blockera dubbelanrop ──────────────────────────────────────
     now = _time.time()
-    running_since = _pipeline_running.get(feature_name)
+    with _pipeline_mutex:
+        running_since = _pipeline_running.get(feature_name)
     if running_since and (now - running_since) < PIPELINE_TIMEOUT_S:
         elapsed = int(now - running_since)
         await manager.broadcast({"type": "loop_blocked",
@@ -1809,9 +1856,10 @@ async def review_feature(payload: dict):
             "error": f"Pipeline för '{feature_name}' körs redan ({elapsed}s). Vänta tills den är klar."})
 
     # ── Försöksräknare: stoppa om för många iterationer ───────────────────────
-    attempts = _pipeline_attempts.get(feature_name, 0) + 1
-    _pipeline_attempts[feature_name] = attempts
-    _pipeline_running[feature_name] = now
+    with _pipeline_mutex:
+        attempts = _pipeline_attempts.get(feature_name, 0) + 1
+        _pipeline_attempts[feature_name] = attempts
+        _pipeline_running[feature_name] = now
 
     if attempts > MAX_PIPELINE_ATTEMPTS:
         _pipeline_running.pop(feature_name, None)
@@ -2100,8 +2148,11 @@ async def build_feature(payload: dict):
     radgivande_recs = cache.get("radgivande_recs", [])
     agent_findings  = []
     for r in cache.get("results", []):
-        for f in r.get("findings", [])[:2]:
-            agent_findings.append(f"{r.get('agent','?')}: {f}")
+        for _fi in r.get("findings", [])[:2]:
+            agent_findings.append(f"{r.get('agent','?')}: {_fi}")
+    # Fallback om review inte körts: hämta spec direkt
+    if not arkitekt_plan and spec_obj.get("description"):
+        arkitekt_plan = f"Implementera: {spec_obj.get('description','')}"
     design_brief = ""
     if arkitekt_plan:
         design_brief += f"ARKITEKTPLAN:\n{arkitekt_plan}\n\n"
@@ -2149,9 +2200,17 @@ async def build_feature(payload: dict):
 
         diff_text = ""
         for d in diffs[:6]:
-            lines_added = [l["content"] for l in d.get("lines",[]) if l.get("type")=="add"][:30]
-            diff_text += f"\n### {d.get('path','?')} ({d.get('action','?')}, +{d.get('added',0)}/-{d.get('removed',0)})\n"
-            diff_text += "\n".join(lines_added)
+            added   = d.get("added",0)
+            removed = d.get("removed",0)
+            diff_text += f"\n### {d.get('path','?')} ({d.get('action','?')}, +{added}/-{removed})"
+            if removed > 200:
+                diff_text += f" ⚠️ VARNING: {removed} rader borttagna — möjlig trunkering!"
+            diff_text += "\n"
+            lines_added   = [l["content"] for l in d.get("lines",[]) if l.get("type")=="add"][:20]
+            lines_removed = [l["content"] for l in d.get("lines",[]) if l.get("type")=="del"][:10]
+            if lines_removed:
+                diff_text += "BORTTAGET:\n" + "\n".join(f"- {l}" for l in lines_removed) + "\n"
+            diff_text += "TILLAGT:\n" + "\n".join(f"+ {l}" for l in lines_added)
 
         qa_input = (
             f"FEATURE: {feature_name}\n\nSPEC:\n{json.dumps(spec_obj,ensure_ascii=False)[:800]}\n\n"
@@ -2200,6 +2259,10 @@ async def build_feature(payload: dict):
 
     await manager.broadcast({"type":"build_done","feature":feature_name,
         "diffs":final_diffs,"summary":final_summary})
+    # Rensa review-cache efter lyckat bygge
+    _review_cache.pop(feature_name, None)
+    _pipeline_running.pop(feature_name, None)
+    _pipeline_attempts.pop(feature_name, None)
     return JSONResponse({"diffs":final_diffs,"summary":final_summary,"files_count":len(file_changes)})
 
 async def _run_inspector_post_build(feature_name: str, diffs: list, proj: dict, s: dict):
@@ -2260,8 +2323,12 @@ async def _run_inspector_post_build(feature_name: str, diffs: list, proj: dict, 
             "status":"GODKÄND","findings":[],"approved":True,"error":str(e)[:100]})
 
 def build_code_sync(spec: dict, pid: str):
-    import asyncio as _as; loop=_as.new_event_loop()
-    return loop.run_until_complete(build_code(spec, pid))
+    import asyncio as _as
+    loop = _as.new_event_loop()
+    try:
+        return loop.run_until_complete(build_code(spec, pid))
+    finally:
+        loop.close()
 
 # Push
 @app.post("/api/push")
@@ -3496,7 +3563,7 @@ async def start_file_watcher():
                 mtime = html_path.stat().st_mtime
                 if mtime != last_mtime:
                     last_mtime = mtime
-                    await manager.broadcast({"type": "reload"})
+                    await manager.broadcast({"type": "hot_reload"})
             except Exception:
                 pass
     asyncio.ensure_future(_watch())

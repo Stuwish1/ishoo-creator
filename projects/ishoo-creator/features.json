@@ -788,5 +788,33 @@
       "källa": "UX-granskare"
     },
     "created": "2026-06-09T15:00:55.790698"
+  },
+  {
+    "id": 56,
+    "name": "Besiktningsrapport med Handlingsplan",
+    "phase": "MVP",
+    "status": "Planerad",
+    "spec": {
+      "name": "Besiktningsrapport med Handlingsplan",
+      "phase": "MVP",
+      "problem": "Besiktningsmannens utlåtande syns inte tydligt i UI — användaren vet inte vad som är fel och trycker Bygg utan att förstå problemen",
+      "solution": "Tydlig modal/panel som visar findings, severity och suggestions. Bygg-knappen blockeras tills användaren aktivt valt nästa steg: bygg om med feedback, ändra spec, eller ignorera.",
+      "users": "Användaren som kör pipeline i Ishoo Creator",
+      "acceptance_criteria": [
+        "AVVISAD → röd modal visas automatiskt med findings, severity och suggestions",
+        "Bygg-knappen är disabled tills rapport är läst och val gjorts",
+        "Val 1: Bygg om med feedback — skickar findings som kontext till Snickaren",
+        "Val 2: Ignorera och bygg ändå — kräver explicit bekräftelse",
+        "GODKÄND → grön bekräftelsepanel, Bygg aktiveras direkt"
+      ],
+      "dependencies": [
+        "pipeline-flödet i index.html",
+        "Besiktningsmannens JSON-svar med status/findings/severity/suggestions"
+      ],
+      "risks": [
+        "app.py är 167KB — Snickaren måste använda Python direct write, ALDRIG Edit-verktyget"
+      ]
+    },
+    "created": "2026-06-09T15:12:26.989942"
   }
 ]
