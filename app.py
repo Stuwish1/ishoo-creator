@@ -718,10 +718,6 @@ Returnera BARA de ändrade funktionerna/sektionerna med tydliga markeringar:
   <description>Vad som ändrades</description>
   <content>
 # PATCH: Ersätt funktionen apply_and_push med denna version
-def apply_and_push(...):
-    # HELA den nya funktionen här
-    ...
-
 # PATCH: Lägg till denna nya funktion efter rad X / efter def foo():
 def ny_funktion():
     ...
