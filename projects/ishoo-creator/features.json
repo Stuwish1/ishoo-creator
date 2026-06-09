@@ -148,5 +148,152 @@
       "källa": "Arkitekt"
     },
     "created": "2026-06-09T13:02:10.621734"
+  },
+  {
+    "id": 11,
+    "name": "3-fas pipeline med tabbar",
+    "phase": "MVP",
+    "status": "Granskas",
+    "spec": {
+      "name": "3-fas pipeline med tabbar",
+      "phase": "MVP",
+      "problem": "Alla agenter kör i en enda fas utan ordning — designbeslut blandas med kodgranskning, ingen naturlig checkpoint för godkännande mellan faser",
+      "solution": "Tre sekventiella faser (Design → Bygg → QA) med godkännande mellan varje. Tre tabbar i UI visar aktiv fas, avklarade faser med grön bock. Tre nya endpoints kör rätt agenter per fas via WebSocket. Fas-state persisteras i pipeline_state.json.",
+      "users": "Alla Ishoo Creator-användare som bygger features",
+      "acceptance_criteria": [
+        "Fas 1 Design: Arkitekt + UI Designer + UX Designer kör parallellt, output visas som strukturerat kort i Design-tab, 'Godkänn design →' knapp + kommentarsfält blockerar fas 2",
+        "Fas 2 Bygg: Frontend/Backend-agenter ger Snickaren instruktioner, Snickaren bygger, diff visas i Bygg-tab, 'Godkänn bygge →' knapp blockerar fas 3",
+        "Fas 3 QA: QA/Security/Performance/Besiktningsman kör parallellt på byggd kod, aggregerat resultat i QA-tab, Push-knapp härifrån",
+        "Tabbar Design|Bygg|QA längst upp — aktiv fas highlightad, avklarade med ✅, man kan klicka tillbaka och läsa tidigare fas",
+        "Fas-state sparas i pipeline_state.json — överlevs reload",
+        "Om en agent i fas 1 misslyckas visas felmeddelande utan att blockera resten av fasen"
+      ],
+      "dependencies": [
+        "Befintlig /api/review och startReview() ersätts/utökas — ej bryts bort"
+      ],
+      "risks": [
+        "app.py är 147KB — Snickaren kan fastna på stora edits. Plan: lägg de tre nya endpoints-blocken som separata sektioner efter rad 2840 (System Health Check)",
+        "index.html är 147KB — tab-UI läggs som nytt #pipeline-tabs block efter befintlig feature-vy",
+        "Två nya agenter (UI Designer, UX Designer, Frontend Kodaren, Backend Kodaren) behöver läggas till DEFAULT_AGENTS"
+      ]
+    },
+    "created": "2026-06-09T13:11:39.928596"
+  },
+  {
+    "id": 12,
+    "name": "3-fas pipeline med tabbar: [Tillgänglighetsgranskaren] Saknad aria-label på alla interaktiva knappar (class='btn', ",
+    "phase": "Backlog",
+    "status": "Planerad",
+    "spec": {
+      "name": "3-fas pipeline med tabbar: [Tillgänglighetsgranskaren] Saknad aria-label på alla interaktiva knappar (class='btn', ",
+      "description": "Saknad aria-label på alla interaktiva knappar (class='btn', onclick-element)",
+      "källa": "Tillgänglighetsgranskaren"
+    },
+    "created": "2026-06-09T13:12:23.833952"
+  },
+  {
+    "id": 13,
+    "name": "3-fas pipeline med tabbar: [Säkerhetsansvarig] settings.json innehåller api_key (sk-ant-...) och github_tok",
+    "phase": "Backlog",
+    "status": "Planerad",
+    "spec": {
+      "name": "3-fas pipeline med tabbar: [Säkerhetsansvarig] settings.json innehåller api_key (sk-ant-...) och github_tok",
+      "description": "settings.json innehåller api_key (sk-ant-...) och github_token (ghp_...) i klartext på disk — dessa läses och hanteras i minnet utan kryptering",
+      "källa": "Säkerhetsansvarig"
+    },
+    "created": "2026-06-09T13:12:23.833962"
+  },
+  {
+    "id": 14,
+    "name": "3-fas pipeline med tabbar: [Arkitekt] Hela systemet bor i två monolitiska filer (app.py ~160KB, in",
+    "phase": "Backlog",
+    "status": "Planerad",
+    "spec": {
+      "name": "3-fas pipeline med tabbar: [Arkitekt] Hela systemet bor i två monolitiska filer (app.py ~160KB, in",
+      "description": "Hela systemet bor i två monolitiska filer (app.py ~160KB, index.html ~152KB) — detta bryter mot separation of concerns på fundamental nivå. Backend-logik, AI-agentdefinitioner, git-hantering, WebSocket-hantering och HTTP-endpoints är alla sammanvävda i en enda fil.",
+      "källa": "Arkitekt"
+    },
+    "created": "2026-06-09T13:12:23.833966"
+  },
+  {
+    "id": 15,
+    "name": "3-fas pipeline med tabbar: [Mobil/Fält] Touchmål på startknappar är under 44px × 44px standard. Butt",
+    "phase": "Backlog",
+    "status": "Planerad",
+    "spec": {
+      "name": "3-fas pipeline med tabbar: [Mobil/Fält] Touchmål på startknappar är under 44px × 44px standard. Butt",
+      "description": "Touchmål på startknappar är under 44px × 44px standard. Buttonens höjd är ca 36px.",
+      "källa": "Mobil/Fält"
+    },
+    "created": "2026-06-09T13:12:23.833968"
+  },
+  {
+    "id": 16,
+    "name": "3-fas pipeline med tabbar: [Ansvarsfördelning] app.py är en God Object på 3287 rader — innehåller settings,",
+    "phase": "Backlog",
+    "status": "Planerad",
+    "spec": {
+      "name": "3-fas pipeline med tabbar: [Ansvarsfördelning] app.py är en God Object på 3287 rader — innehåller settings,",
+      "description": "app.py är en God Object på 3287 rader — innehåller settings, projekthantering, git, AI-agenter, WebSocket, alla API-endpoints, build-logik, spec-granskning, versionshistorik och filsystemsoperationer i EN fil",
+      "källa": "Ansvarsfördelning"
+    },
+    "created": "2026-06-09T13:12:23.833971"
+  },
+  {
+    "id": 17,
+    "name": "3-fas pipeline med tabbar: [Beroendeanalytikorn] Feature kräver 3 nya fas-endpoints i app.py: /api/pipeline/d",
+    "phase": "Backlog",
+    "status": "Planerad",
+    "spec": {
+      "name": "3-fas pipeline med tabbar: [Beroendeanalytikorn] Feature kräver 3 nya fas-endpoints i app.py: /api/pipeline/d",
+      "description": "Feature kräver 3 nya fas-endpoints i app.py: /api/pipeline/design, /api/pipeline/build, /api/pipeline/qa — dessa saknas",
+      "källa": "Beroendeanalytikorn"
+    },
+    "created": "2026-06-09T13:12:23.833973"
+  },
+  {
+    "id": 18,
+    "name": "3-fas pipeline med tabbar: ↳ 1. settings.json innehåller api_key (sk-ant-...) och",
+    "phase": "Backlog",
+    "status": "Planerad",
+    "parent_feature": "3-fas pipeline med tabbar",
+    "spec": {
+      "name": "3-fas pipeline med tabbar: ↳ 1. settings.json innehåller api_key (sk-ant-...) och",
+      "description": "settings.json innehåller api_key (sk-ant-...) och github_token (ghp_...) i klartext på disk — dessa exponeras om filen råkar committas trots .gitignore-regel",
+      "prioritet": 1,
+      "beroende_av": [],
+      "källa": "Säkerhetsansvarig"
+    },
+    "created": "2026-06-09T13:13:21.993393"
+  },
+  {
+    "id": 19,
+    "name": "3-fas pipeline med tabbar: ↳ 2. git_setup.py bygger remote_url med token inbakat:",
+    "phase": "Backlog",
+    "status": "Planerad",
+    "parent_feature": "3-fas pipeline med tabbar",
+    "spec": {
+      "name": "3-fas pipeline med tabbar: ↳ 2. git_setup.py bygger remote_url med token inbakat:",
+      "description": "git_setup.py bygger remote_url med token inbakat: f'https://{token}@github.com/...' — token exponeras i git-loggarna (reflog, git remote -v) i klartext",
+      "prioritet": 2,
+      "beroende_av": [],
+      "källa": "Säkerhetsansvarig"
+    },
+    "created": "2026-06-09T13:13:21.993442"
+  },
+  {
+    "id": 20,
+    "name": "3-fas pipeline med tabbar: ↳ 3. Monolitisk arkitektur: all affärslogik, AI-agenter",
+    "phase": "Backlog",
+    "status": "Planerad",
+    "parent_feature": "3-fas pipeline med tabbar",
+    "spec": {
+      "name": "3-fas pipeline med tabbar: ↳ 3. Monolitisk arkitektur: all affärslogik, AI-agenter",
+      "description": "Monolitisk arkitektur: all affärslogik, AI-agenter, git-hantering, WebSocket, API-endpoints och filhantering bor i en enda app.py (~3287 rader). Detta bryter mot separation of concerns på fundamental nivå.",
+      "prioritet": 3,
+      "beroende_av": [],
+      "källa": "Arkitekt"
+    },
+    "created": "2026-06-09T13:13:21.993493"
   }
 ]

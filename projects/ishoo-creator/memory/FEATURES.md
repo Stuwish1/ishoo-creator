@@ -6,6 +6,8 @@
 ## MVP
 - [] **Clipboard Image Input** - Planerad
 - [] **Fixa starta granskning kraschar** - Planerad
+- [] **Fixa starta granskning kraschar** - Planerad
+- -> **3-fas pipeline med tabbar** - Granskas
 
 ## v1
 *(Inga annu)*
