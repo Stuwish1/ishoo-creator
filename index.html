@@ -394,7 +394,8 @@ header h1{font-size:14px;font-weight:700;margin-right:4px;}
       <div class="drag-hint">📎 Släpp bild här</div>
       <div class="chat-img-previews" id="imgPreviews"></div>
       <textarea class="chat-input" id="chatInput" rows="1"
-        placeholder="Berätta vad du vill bygga, eller dra in en bild..."></textarea>
+        placeholder="Berätta vad du vill bygga, eller dra in en bild..."
+        onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMessage();}"></textarea>
       <div class="chat-toolbar">
         <label class="tool-btn" title="Bifoga bild" style="cursor:pointer;">
           📎<input type="file" id="imgFileInput" accept="image/*" multiple style="display:none;" onchange="handleImgFiles(this.files)">
@@ -2167,14 +2168,27 @@ function addMsg(role,text,isHtml=false){
   }
 }
 
-function saveChatHistory(){try{localStorage.setItem('chatHistory_'+location.search,JSON.stringify(chatHistory));}catch(e){}}
+function saveChatHistory(){
+  try{localStorage.setItem('chatHistory_v2',JSON.stringify(chatHistory));}catch(e){}
+}
 function restoreChatHistory(){
   try{
-    const h=JSON.parse(localStorage.getItem('chatHistory_'+location.search)||'[]');
+    const h=JSON.parse(localStorage.getItem('chatHistory_v2')||'[]');
     chatHistory=h;
     h.slice(-20).forEach(m=>addMsg(m.role==='user'?'user':'assistant',m.content));
   }catch(e){}
 }
+
+// ─── START ────────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', ()=>{
+  renderAgents([]);
+  connectWS();
+  loadAll();
+  loadArch();
+  checkOllamaStatus();
+  setTimeout(loadHealth, 1500);
+  restoreChatHistory();
+});
 
 </script>
 </body>

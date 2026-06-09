@@ -2694,6 +2694,196 @@ async def git_push_direct(payload: dict):
 
 
 
+
+
+# ═══════════════════════════════════════════════════════════════
+#  KOD-ITERATOR — Iterativ kodanalys-agent
+# ═══════════════════════════════════════════════════════════════
+
+def _read_project_files(proj_path: Path, max_chars: int = 40000) -> str:
+    """Läser de viktigaste kodfilerna i projektet och returnerar som text."""
+    exts = {".py", ".js", ".ts", ".jsx", ".tsx", ".html", ".css", ".json", ".md"}
+    skip_dirs = {"node_modules", ".git", "__pycache__", ".venv", "venv", "dist", "build", ".next"}
+    files_content = []
+    total = 0
+    priority = []
+    rest = []
+    for p in sorted(proj_path.rglob("*")):
+        if p.is_dir():
+            continue
+        if any(s in p.parts for s in skip_dirs):
+            continue
+        if p.suffix not in exts:
+            continue
+        # Prioritera källkodsfiler
+        if p.suffix in {".py", ".js", ".ts", ".jsx", ".tsx"}:
+            priority.append(p)
+        else:
+            rest.append(p)
+    for p in priority + rest:
+        try:
+            text = p.read_text(encoding="utf-8", errors="ignore")
+            if len(text) > 8000:
+                text = text[:8000] + f"\n...(trunkerad, {len(text)} tecken totalt)"
+            snippet = f"### {p.name}\n{text}\n"
+            if total + len(snippet) > max_chars:
+                break
+            files_content.append(snippet)
+            total += len(snippet)
+        except Exception:
+            continue
+    return "\n".join(files_content) if files_content else "(inga kodfiler hittades)"
+
+
+@app.post("/api/code-iterator")
+async def code_iterator(payload: dict, background_tasks: BackgroundTasks):
+    """Iterativ kodanalys — kör N pass med Claude för att hitta uppgifter."""
+    s = load_settings()
+    proj = get_active_project()
+    if not proj:
+        return JSONResponse({"ok": False, "error": "Inget aktivt projekt"}, status_code=400)
+    iterations = max(1, min(int(payload.get("iterations", 3)), 8))
+    focus = payload.get("focus", "").strip()
+    proj_path = project_dir(proj["id"])
+    background_tasks.add_task(
+        _run_code_iterator_bg, proj, proj_path, iterations, focus, s
+    )
+    return JSONResponse({"ok": True, "iterations": iterations})
+
+
+async def _run_code_iterator_bg(proj: dict, proj_path: Path, iterations: int, focus: str, s: dict):
+    import anthropic as _ant
+    client = _ant.Anthropic(api_key=s.get("api_key", ""))
+    
+    await manager.broadcast({
+        "type": "iterator_start",
+        "iterations": iterations,
+        "project": proj.get("name", "")
+    })
+    
+    # Läs kodbasen EN gång
+    code_snapshot = _read_project_files(proj_path)
+    
+    all_findings: list[dict] = []
+    prev_summary = ""
+    
+    for i in range(1, iterations + 1):
+        await manager.broadcast({
+            "type": "iterator_iteration",
+            "current": i,
+            "total": iterations,
+            "status": "running"
+        })
+        
+        prev_ctx = ""
+        if prev_summary:
+            prev_ctx = f"""\n\nFYND FRÅN TIDIGARE ITERATIONER (undvik exakta dubletter):\n{prev_summary}"""
+        
+        focus_ctx = f"\n\nSPECIALT FOKUS: {focus}" if focus else ""
+        
+        prompt = (
+            f"Du är en expert kod-revisor. Analysera koden nedan och hitta KONKRETA förbättringsuppgifter.{focus_ctx}\n"
+            f"Iteration {i} av {iterations} — var mer djupgående för varje iteration.{prev_ctx}\n\n"
+            "KOD:\n" + code_snapshot[:35000] + "\n\n"
+            "Svara ENBART som JSON-array med uppgifter. Varje uppgift:\n"
+            '{"title":"kort titel","category":"bug|säkerhet|prestanda|kodkvalitet|ux|test|arkitektur","priority":"hög|medel|låg","details":"1-2 meningar om vad som behöver göras","file":"filnamn.py eller null"}\n'
+            "Hitta 3-7 NYA uppgifter som inte redan finns i tidigare fynd. Inga kommentarer utanför JSON-arrayen."
+        )
+        
+        try:
+            resp = client.messages.create(
+                model="claude-sonnet-4-6",
+                max_tokens=1500,
+                messages=[{"role": "user", "content": prompt}]
+            )
+            raw = resp.content[0].text.strip()
+            # Extrahera JSON-array
+            import re as _re
+            m = _re.search(r'\[.*\]', raw, _re.DOTALL)
+            if m:
+                import json as _json
+                new_findings = _json.loads(m.group(0))
+            else:
+                new_findings = []
+        except Exception as e:
+            new_findings = []
+            await manager.broadcast({
+                "type": "iterator_error",
+                "iteration": i,
+                "error": str(e)[:120]
+            })
+        
+        # Deduplicera mot befintliga fynd (enkel titel-matchning)
+        existing_titles = {f["title"].lower() for f in all_findings}
+        added = []
+        for f in new_findings:
+            if isinstance(f, dict) and f.get("title","").lower() not in existing_titles:
+                f["iteration"] = i
+                all_findings.append(f)
+                existing_titles.add(f.get("title","").lower())
+                added.append(f)
+        
+        # Sammanfatta för nästa iteration
+        prev_summary = "\n".join(f"- [{f['category']}] {f['title']}" for f in all_findings[:30])
+        
+        await manager.broadcast({
+            "type": "iterator_iteration",
+            "current": i,
+            "total": iterations,
+            "status": "done",
+            "new_count": len(added),
+            "findings": added
+        })
+        
+        # Kort paus mellan iterationer
+        await asyncio.sleep(0.5)
+    
+    # Lägg till i backlog automatiskt
+    pid = proj["id"]
+    features = load_features(pid)
+    existing_names = {f["name"].lower() for f in features}
+    added_to_backlog = []
+    
+    # Konvertera kategori → fas
+    cat_to_phase = {
+        "bug": "Bug", "säkerhet": "Säkerhet", "prestanda": "MVP",
+        "kodkvalitet": "Förbättring", "ux": "MVP", "test": "Förbättring",
+        "arkitektur": "Arkitektur"
+    }
+    prio_map = {"hög": "KRITISKT", "medel": "Normal", "låg": "Önskelista"}
+    
+    for f in all_findings:
+        name = f.get("title", "")[:80]
+        if not name or name.lower() in existing_names:
+            continue
+        phase = cat_to_phase.get(f.get("category","").lower(), "Förbättring")
+        tag = prio_map.get(f.get("priority","").lower(), "Normal")
+        desc = f.get("details", "")
+        file_ref = f.get("file")
+        full_desc = f"{desc} [Fil: {file_ref}]" if file_ref else desc
+        features.append({
+            "name": name,
+            "status": "Planerad",
+            "phase": phase,
+            "priority_tag": tag,
+            "description": full_desc,
+            "source": "kod-iterator",
+            "iteration": f.get("iteration", 1)
+        })
+        existing_names.add(name.lower())
+        added_to_backlog.append(name)
+    
+    save_features(pid, features)
+    update_features_md(pid)
+    
+    await manager.broadcast({
+        "type": "iterator_done",
+        "total_findings": len(all_findings),
+        "added_to_backlog": len(added_to_backlog),
+        "findings": all_findings
+    })
+
+
 @app.on_event("startup")
 async def start_file_watcher():
     async def _watch():
