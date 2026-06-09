@@ -24,11 +24,9 @@ header h1{font-size:14px;font-weight:700;margin-right:4px;}
 .conn-dot{width:8px;height:8px;border-radius:50%;background:var(--red);transition:background .3s;}
 .conn-dot.ok{background:var(--green);box-shadow:0 0 5px var(--green);}
 /* LAYOUT */
-.layout{display:grid;grid-template-columns:var(--sidebar-w,260px) 1fr 270px;flex:1;overflow:hidden;min-height:0;}
-.resize-handle{width:5px;cursor:col-resize;background:transparent;transition:background .15s;z-index:10;flex-shrink:0;}
+.layout{display:grid;grid-template-columns:var(--sidebar-w,260px) 5px 1fr 270px;flex:1;overflow:hidden;min-height:0;}
+.resize-handle{width:5px;cursor:col-resize;background:transparent;transition:background .15s;z-index:10;}
 .resize-handle:hover,.resize-handle.dragging{background:var(--accent);}
-.resize-handle-right{width:5px;cursor:col-resize;background:transparent;transition:background .15s;z-index:10;flex-shrink:0;}
-.resize-handle-right:hover,.resize-handle-right.dragging{background:var(--accent);}
 /* PREVIEW MODAL */
 .preview-overlay{position:fixed;inset:0;background:rgba(0,0,0,.8);display:none;flex-direction:column;z-index:150;backdrop-filter:blur(4px);}
 .preview-overlay.open{display:flex;}
@@ -201,6 +199,8 @@ header h1{font-size:14px;font-weight:700;margin-right:4px;}
 .s-running{background:rgba(234,179,8,.15);color:var(--yellow);animation:pulse 1.2s infinite;}
 .s-approved{background:rgba(34,197,94,.15);color:var(--green);}
 .s-rejected{background:rgba(239,68,68,.15);color:var(--red);}
+.s-domare{background:rgba(99,102,241,.1);color:var(--muted);font-style:italic;}
+.s-domare-active{background:rgba(245,158,11,.2);color:#f59e0b;animation:pulse 1.2s infinite;}
 .agent-findings{margin-top:4px;}
 .finding{font-size:11px;color:var(--muted);padding:1px 0;line-height:1.4;}
 .finding::before{content:"· ";}
@@ -416,6 +416,7 @@ header h1{font-size:14px;font-weight:700;margin-right:4px;}
     <div style="padding:6px 12px 2px;display:flex;align-items:center;gap:6px;flex-shrink:0;">
       <span style="font-size:10px;color:var(--muted);flex:1;">PIPELINE</span>
       <span class="iter-badge" id="iterBadge">–</span>
+      <button onclick="copyAgentResults()" title="Kopiera alla agentsvar" style="background:none;border:1px solid var(--border);border-radius:4px;color:var(--muted);font-size:10px;padding:2px 6px;cursor:pointer;" id="copyAgentsBtn">📋</button>
     </div>
     <div style="flex:1;overflow-y:auto;" id="agentList"></div>
     <div class="pipe-footer">
@@ -720,7 +721,29 @@ let currentDiffs=[],agentsDone=0,phaseFilter='all',currentEnv='dev',appState='id
 let onboardingProjectId=null,onboardingHistory=[];
 let pendingSysConfig=null,currentAgents=[];
 let attachedImages=[];
-let isAiBusy=false; // blockerar dubbelsändning
+let isAiBusy=false;
+let _agentLog={}; // id -> {name, status, findings, suggestions}
+let _reviewFeatureName=''; // spara featurenamn för kopiering
+
+function copyAgentResults(){
+  if(!Object.keys(_agentLog).length){
+    alert('Inga agentsvar att kopiera ännu — kör en granskning först.');return;
+  }
+  const feature = _reviewFeatureName || document.getElementById('pipeLabel')?.textContent||'';
+  const lines = [`=== AGENTSVAR: ${feature} ===\n`];
+  for(const [id,a] of Object.entries(_agentLog)){
+    const st = a.status==='approved'?'✅ GODKÄND':'❌ AVVISAD';
+    lines.push(`${a.name}\n${st}`);
+    if(a.findings?.length) lines.push(a.findings.map(f=>`• ${f}`).join('\n'));
+    if(a.suggestions?.length) lines.push('Förslag:\n'+a.suggestions.map(s=>`  → ${s}`).join('\n'));
+    lines.push('');
+  }
+  navigator.clipboard.writeText(lines.join('\n')).then(()=>{
+    const btn=document.getElementById('copyAgentsBtn');
+    btn.textContent='✓ Kopierat';btn.style.color='var(--green)';
+    setTimeout(()=>{btn.textContent='📋';btn.style.color='';},2000);
+  });
+}
 
 // ─── SIDEBAR RESIZE ──────────────────────────────────────────────────────────
 (function(){
@@ -849,6 +872,7 @@ function connectWS(){
 function handleWS(msg){
   if(msg.type==='pipeline_start'){
     agentsDone=0;
+    _reviewFeatureName=msg.feature||'';
     setProgress(0,`Granskar: ${msg.feature}`);
     // Re-render agents from current settings
     if(msg.agents) renderAgents(msg.agents);
@@ -859,7 +883,7 @@ function handleWS(msg){
     agentsDone=0;
   }
   else if(msg.type==='agent_status'){
-    setAgent(msg.id,msg.status,msg.findings||[]);
+    setAgent(msg.id,msg.status,msg.findings||[],{suggestions:msg.suggestions||[]});
     if(msg.status==='approved'||msg.status==='rejected'){
       agentsDone++;
       setProgress(Math.round(agentsDone/Math.max(currentAgents.length,1)*100),`${agentsDone}/${currentAgents.length} klara`);
@@ -868,7 +892,14 @@ function handleWS(msg){
   else if(msg.type==='pipeline_done'){
     if(msg.success){
       setProgress(100,'✅ Godkänd — klar att bygga');
-      addMsg('assistant',`✅ Alla agenter godkände **${msg.feature}**!\n\nKlicka **Bygg kod** för att generera ändringar.`);
+      const backlog = msg.backlog_added || [];
+      const backlogHtml = backlog.length
+        ? `<div style="margin-top:8px;padding:8px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.3);border-radius:6px">
+            <div style="font-size:11px;font-weight:600;color:#f59e0b;margin-bottom:5px">📌 ${backlog.length} följduppgifter skapade under denna feature:</div>
+            ${backlog.map((t,i)=>{const label=t.split(' — ').slice(1).join(' — ')||t;return`<div style="font-size:11px;color:var(--muted);padding:2px 0;display:flex;gap:5px"><span style="color:#f59e0b;font-weight:700">${i+1}.</span>${label.slice(0,80)}</div>`;}).join('')}
+           </div>`
+        : '';
+      addMsg('assistant', `<div>✅ Alla agenter godkände <strong>${msg.feature}</strong>!<br>Klicka <strong>Bygg kod</strong> för att generera ändringar.</div>${backlogHtml}`, true);
       showActionBar('reviewed',msg.feature);
     } else if(msg.projektledare_message){
       // Domaren har analyserat — Projektledaren presenterar rapporten
@@ -1090,7 +1121,13 @@ function renderFeatureRow(f, subCount, subDone){
 
 function renderSubtaskRow(f, idx){
   const n=_escQ(f.name);
-  const displayName = f.name.includes(': ') ? f.name.split(': ').slice(1).join(': ') : f.name;
+  // Visa bara den korta etiketten — strip "Förälder: ↳ N. " eller "Förälder: Följduppgift N — "
+  let displayName = f.name;
+  if(f.parent_feature && displayName.startsWith(f.parent_feature)){
+    displayName = displayName.slice(f.parent_feature.length).replace(/^:\s*/,'').replace(/^↳\s*\d+\.\s*/,'').replace(/^Följduppgift\s*\d+\s*[—-]\s*/,'').trim();
+  } else if(displayName.includes(': ')){
+    displayName = displayName.split(': ').slice(1).join(': ');
+  }
   const prio = f.spec?.prioritet || (idx+1);
   const deps = (f.spec?.beroende_av||[]).length>0
     ? `<div style="font-size:9px;color:var(--muted);margin-top:2px">⛓ ${f.spec.beroende_av.map(d=>d.split(': ').pop()).join(', ')}</div>`
@@ -1974,24 +2011,36 @@ function renderAgents(agents){
     {id:'konfiguration',name:'⚙️ Konfigurationsgranskaren'},{id:'performance',name:'⚡ Prestanda'},
     {id:'ux',name:'🎨 UX-granskare'},{id:'mobile',name:'📱 Mobil/Fält'},
     {id:'tester',name:'🧪 Testbarhet'},{id:'inspector',name:'✅ Besiktningsman'},
+    {id:'domare',name:'⚖️ Domaren',is_domare:true},
   ];
-  document.getElementById('agentList').innerHTML=currentAgents.map(a=>`
-    <div class="agent-row" id="row-${a.id}">
+  _agentLog={};  // Rensa logg vid ny granskning
+  document.getElementById('agentList').innerHTML=currentAgents.map(a=>{
+    const isDom = a.is_domare||a.id==='domare';
+    const rowStyle = isDom ? 'border-top:2px solid var(--border);margin-top:4px;' : '';
+    const pillInit = isDom ? 's-domare' : 's-waiting';
+    const pillTxt  = isDom ? 'Vilar' : 'Väntar';
+    return `<div class="agent-row" id="row-${a.id}" style="${rowStyle}">
       <div class="agent-row-top">
         <div class="agent-name">${a.name}</div>
-        <span class="s-pill s-waiting" id="pill-${a.id}">Väntar</span>
+        <span class="s-pill ${pillInit}" id="pill-${a.id}">${pillTxt}</span>
       </div>
       <div class="agent-findings" id="findings-${a.id}"></div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 
-function setAgent(id,status,findings=[]){
+function setAgent(id,status,findings=[],extra={}){
   const pill=document.getElementById(`pill-${id}`);if(!pill)return;
   const m={waiting:['s-waiting','Väntar'],running:['s-running','Kör...'],approved:['s-approved','Godkänd'],rejected:['s-rejected','Avvisad']};
   const[cls,lbl]=m[status]||m.waiting;
   pill.className=`s-pill ${cls}`;pill.textContent=lbl;
   const fd=document.getElementById(`findings-${id}`);
   if(fd) fd.innerHTML=findings.map(f=>`<div class="finding">${f}</div>`).join('');
+  // Spara i logg för kopiering
+  const agentName = currentAgents.find(a=>a.id===id)?.name || id;
+  if(status==='approved'||status==='rejected'){
+    _agentLog[id]={name:agentName, status, findings:[...findings], suggestions:extra.suggestions||[]};
+  }
 }
 
 function setProgress(pct,lbl){

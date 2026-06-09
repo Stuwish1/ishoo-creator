@@ -1443,9 +1443,10 @@ async def review_feature(payload: dict):
     def ctx_for(agent_def: dict) -> str:
         return code_ctx_ollama if agent_def.get("model","").startswith("ollama:") else code_ctx_claude
 
+    domare_entry = {"id": "domare", "name": "⚖️Domaren", "model": "sonnet", "is_domare": True}
     await manager.broadcast({"type": "pipeline_start", "feature": feature_name,
         "agents": [{"id": a["id"], "name": f"{a.get('emoji','')}{a['name']}", "model": a.get("model","haiku")}
-                   for a in agents + [inspector]]})
+                   for a in agents + [inspector]] + [domare_entry]})
     await manager.broadcast({"type": "iteration", "iteration": 1, "max": 1})
 
     # ── Steg 1: Kör ALLA granskare parallellt ────────────────────────────────
@@ -1515,10 +1516,78 @@ async def review_feature(payload: dict):
         for f in features:
             if f["name"] == feature_name:
                 f["status"] = "Granskas"
+
+        # ── Skapa max 3 uppföljningsuppgifter — bara unika HIGH utanför specens scope ──
+        backlog_added = []
+        TRUSTED_AGENTS = {"security", "architect", "felhantering", "performance"}
+        FP = ["strukturindex", "ingen fil", "finns ingen fil", "typescript-typer",
+              "filplacering", "src/", "kallad strukturindex", "saknad beroende på typescript",
+              "duplicerad", "duplikat", "duplicate", "två gånger", "two definition",
+              "two definitioner", "definierad två", "redan definierad"]
+        def is_fp(t: str) -> bool:
+            tl = t.lower()
+            return any(p in tl for p in FP)
+        def fp_overlap_with_spec(t: str) -> bool:
+            # Hoppa över fynd som handlar om samma sak som featuren redan fixar
+            spec_words = set(spec_str.lower().split())
+            finding_words = set(t.lower().split())
+            overlap = spec_words & finding_words
+            meaningful = {w for w in overlap if len(w) > 4}
+            return len(meaningful) >= 3
+
+        seen_fingerprints = set()
+        existing_names = {f["name"] for f in features}
+        prio = 1
+        priority_order = ["security","architect","felhantering","performance"]
+        sorted_results = sorted(
+            [r for r in results if r.get("status") not in ("GODKAND","GODKÄND") and r.get("severity")=="HIGH"],
+            key=lambda r: priority_order.index(r.get("id","")) if r.get("id","") in priority_order else 99
+        )
+        for r in sorted_results:
+            if prio > 3: break
+            if r.get("id","") not in TRUSTED_AGENTS: continue
+            agent_label = r.get("agent","?")
+            for finding in r.get("findings",[])[:2]:
+                if prio > 3: break
+                if len(finding) < 20: continue
+                if is_fp(finding): continue
+                if fp_overlap_with_spec(finding): continue
+                # Fingerprint: 6 mest frekventa ord (ignorera stoppord)
+                stopwords = {"och","att","är","en","ett","som","på","av","för","med","i","det","den","de"}
+                words = [w for w in finding.lower().split() if w not in stopwords and len(w)>3]
+                fingerprint = " ".join(sorted(words[:6]))
+                if fingerprint in seen_fingerprints: continue
+                seen_fingerprints.add(fingerprint)
+                # Kort, beskrivande namn utan förälderns prefix
+                short_label = finding[:50].rstrip().rstrip("—").strip()
+                task_name = f"{feature_name}: ↳ {prio}. {short_label}"
+                if task_name in existing_names: continue
+                existing_names.add(task_name)
+                features.append({
+                    "id": len(features) + 1,
+                    "name": task_name,
+                    "phase": "Backlog",
+                    "status": "Planerad",
+                    "parent_feature": feature_name,
+                    "spec": {
+                        "name": task_name,
+                        "description": finding,
+                        "prioritet": prio,
+                        "beroende_av": [],
+                        "källa": agent_label
+                    },
+                    "created": datetime.now().isoformat()
+                })
+                backlog_added.append(task_name)
+                prio += 1
+
         save_features(proj["id"], features)
+        update_features_md(proj["id"])
         await manager.broadcast({"type": "pipeline_done", "success": True,
-            "feature": feature_name, "snickare_instruktioner": snickare_instruktioner})
-        return JSONResponse({"approved": True, "snickare_instruktioner": snickare_instruktioner})
+            "feature": feature_name, "snickare_instruktioner": snickare_instruktioner,
+            "backlog_added": backlog_added})
+        return JSONResponse({"approved": True, "snickare_instruktioner": snickare_instruktioner,
+                             "backlog_added": backlog_added})
 
     # ── Steg 4: Avvisat → Domaren analyserar direkt ──────────────────────────
     await manager.broadcast({"type": "domare_start", "feature": feature_name})
@@ -2495,11 +2564,9 @@ async def git_push_direct(payload: dict):
         err = str(e)
     if err:
         return JSONResponse({"ok": False, "error": err})
-    await manager.broadcast({"type": "git_push_done", "url": f"https://github.com/{username}/{repo_name}"})
-    return JSONResponse({"ok": True, "url": f"https://github.com/{username}/{repo_name}"})
+    await manager.broadcast({"type": "git_push_done", "url": "https://github.com/"+username+"/"+repo_name})
+    return JSONResponse({"ok": True, "url": "https://github.com/"+username+"/"+repo_name})
 
-
-# ─── Startup: hot-reload file watcher ────────────────────────────────────────
 
 @app.on_event("startup")
 async def start_file_watcher():
