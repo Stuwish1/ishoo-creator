@@ -1,25 +1,25 @@
 # STRUKTURINDEX
-Uppdaterad: 2026-06-09 13:14
+Uppdaterad: 2026-06-09 13:25
 
 ## Filstruktur
 ```
-STRUKTURINDEX.md  (9kb)
+STRUKTURINDEX.md  (1kb)
 app.py  (14kb)
 fix_duplicate.py  (3kb)
 git_setup.py  (3kb)
-index.html  (152kb)
+index.html  (157kb)
 projects.json  (301b)
 projects/
   innob-bygg/
     project_settings.json  (157b)
   ishoo-creator/
-    STRUKTURINDEX.md  (9kb)
-    features.json  (15kb)
+    STRUKTURINDEX.md  (1kb)
+    features.json  (19kb)
     memory/
       ARCHITECTURE.md  (3kb)
       CLAUDE.md  (2kb)
       DECISIONS.md  (1014b)
-      FEATURES.md  (325b)
+      FEATURES.md  (391b)
       PATTERNS.md  (2kb)
       SCHEMA.md  (1kb)
     project_settings.json  (152b)
@@ -31,10 +31,10 @@ settings.json  (388b)
 
 ### app.py
 ```
-  [174 rader]
+  [166 rader]
   r24: # ─── Dev Server State ───────────────────────────────────────────────
-  r43: # ─── Settings ───────────────────────────────────────────────────────
-  r90: REGLER Python/FastAPI: endpoints i app.py under rätt # ─── sektion, ag
+  r44: # ─── Settings ───────────────────────────────────────────────────────
+  r91: REGLER Python/FastAPI: endpoints i app.py under rätt # ─── sektion, ag
 ```
 
 ### fix_duplicate.py

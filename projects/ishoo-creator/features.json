@@ -300,7 +300,7 @@
     "id": 21,
     "name": "Syntax-guard för Python-filer i apply_and_push",
     "phase": "MVP",
-    "status": "Planerad",
+    "status": "I dev",
     "spec": {
       "name": "Syntax-guard för Python-filer i apply_and_push",
       "phase": "MVP",
