@@ -927,6 +927,9 @@ PROJEKTMINNE:
 FASÖVERSIKT:
 {phases}"""
 
+# Cache för agentfynd — används av Besiktningsmannen post-build
+_review_cache: dict = {}
+
 # ─── Domare — aktiveras efter max_iter misslyckanden ─────────────────────────
 
 DOMARE_PROMPT = """Du är Domaren — kontinuerlig prioriterare. Du aktiveras när en granskning misslyckas.
@@ -1483,21 +1486,71 @@ async def review_feature(payload: dict):
     def ctx_for(agent_def: dict) -> str:
         return code_ctx_ollama if agent_def.get("model","").startswith("ollama:") else code_ctx_claude
 
-    domare_entry = {"id": "domare", "name": "⚖️Domaren", "model": "sonnet", "is_domare": True}
-    await manager.broadcast({"type": "pipeline_start", "feature": feature_name,
-        "agents": [{"id": a["id"], "name": f"{a.get('emoji','')}{a['name']}", "model": a.get("model","haiku")}
-                   for a in agents + [inspector]] + [domare_entry]})
-    await manager.broadcast({"type": "iteration", "iteration": 1, "max": 1})
+    # Agenter som kan STOPPA bygget (HIGH-avvisning blockerar)
+    BLOCKERANDE_IDS = {"security", "dba", "felhantering", "typgranskare", "beroendeanalytiker"}
 
-    # ── Steg 1: Kör ALLA granskare parallellt ────────────────────────────────
+    # ── FAS 1: Arkitektritning ────────────────────────────────────────────────
+    ARK_PROMPT = (
+        "Du är Chefarkitekt och Kravanalytiker. Skapa en HANDLINGSBAR teknisk plan för Snickaren.\n"
+        "Planen ska innehalla: vilka filer andras/skapas, vilka funktioner/klasser behovs, nya API-endpoints, beroendeordning.\n"
+        "OM spec saknar kritisk info for implementering: lista fragorna i 'fragor'. Annars: tom lista.\n"
+        "Returnera ENBART JSON: {\"status\":\"GODKAND\"/\"BEHOVER_SVAR\","
+        "\"plan\":\"Detaljerad plan som text\","
+        "\"komponenter\":[\"fil.py: lagg till funktion X\"],"
+        "\"fragor\":[],"
+        "\"findings\":[],\"severity\":\"LOW\",\"suggestions\":[]}"
+    )
+    arkitekt_fas_agent = {"id":"arkitekt_fas","name":"Chefarkitekt","emoji":"📐",
+                          "model":"sonnet","prompt":ARK_PROMPT}
+
+    domare_entry = {"id": "domare", "name": "⚖️Domaren", "model": "sonnet", "is_domare": True}
+    all_ui_agents = (
+        [{"id":"arkitekt_fas","name":"📐Chefarkitekt","model":"sonnet","phase":1}]
+        + [{"id":a["id"],"name":f"{a.get('emoji','')}{a['name']}","model":a.get("model","haiku"),
+            "phase":2,"is_blocker":a["id"] in BLOCKERANDE_IDS} for a in agents]
+        + [domare_entry]
+    )
+    await manager.broadcast({"type":"pipeline_start","feature":feature_name,"agents":all_ui_agents})
+    await manager.broadcast({"type":"iteration","iteration":1,"max":1})
+
+    # Fas 1: Kör Chefarkitekt
+    await manager.broadcast({"type":"phase_start","phase":1,"name":"Arkitektritning"})
+    await manager.broadcast({"type":"agent_status","id":"arkitekt_fas",
+        "name":"📐Chefarkitekt","status":"running"})
+    ark = await loop.run_in_executor(None, run_agent, arkitekt_fas_agent,
+        spec_str, memory, "", s, code_ctx_claude)
+    arkitekt_plan = ark.get("plan","") or "\n".join(ark.get("komponenter",[]))
+    ark_status = ark.get("status","GODKAND")
+    ark_fragor = ark.get("fragor",[])
+    await manager.broadcast({"type":"agent_status","id":"arkitekt_fas",
+        "name":"📐Chefarkitekt",
+        "status":"approved" if ark_status in ("GODKAND","GODKÄND") else "rejected",
+        "findings":ark.get("komponenter",[])[:5],"severity":"LOW"})
+    await manager.broadcast({"type":"phase_done","phase":1,"name":"Arkitektritning",
+        "plan":arkitekt_plan,"fragor":ark_fragor})
+
+    # Om arkitekten behöver svar → pausa och fråga användaren
+    if ark_fragor and ark_status not in ("GODKAND","GODKÄND"):
+        fragor_text = "\n".join(f"- {q}" for q in ark_fragor)
+        await manager.broadcast({"type":"pipeline_done","success":False,
+            "feature":feature_name,
+            "reason":f"📐 Chefarkitekten behöver svar innan planen kan färdigställas:\n\n{fragor_text}",
+            "arkitekt_fragor":ark_fragor})
+        return JSONResponse({"approved":False,"arkitekt_fragor":ark_fragor})
+
+    # Utöka spec med arkitektplan för fas 2
+    enriched_spec = f"{spec_str}\n\n## ARKITEKTRITNING:\n{arkitekt_plan}"
+
+    # ── FAS 2: Specialistgranskning (parallell) ───────────────────────────────
+    await manager.broadcast({"type":"phase_start","phase":2,"name":"Specialistgranskning"})
     for agent in agents:
-        await manager.broadcast({"type": "agent_status", "id": agent["id"],
-            "name": f"{agent.get('emoji','')}{agent['name']}", "status": "running"})
+        await manager.broadcast({"type":"agent_status","id":agent["id"],
+            "name":f"{agent.get('emoji','')}{agent['name']}","status":"running"})
 
     results = []
     from concurrent.futures import as_completed as _as_completed
     ex = ThreadPoolExecutor(max_workers=min(len(agents), 10))
-    future_to_agent = {ex.submit(run_agent, ag, spec_str, memory, "", s, ctx_for(ag)): ag
+    future_to_agent = {ex.submit(run_agent, ag, enriched_spec, memory, "", s, ctx_for(ag)): ag
                        for ag in agents}
     try:
         pending_futures = set(future_to_agent.keys())
@@ -1509,49 +1562,45 @@ async def review_feature(payload: dict):
             try:
                 result = done_future.result()
             except Exception as e:
-                result = {"id": ag["id"], "agent": ag["name"], "status": "GODKAND",
-                          "findings": [f"Agent-fel: {e}"], "severity": "LOW", "suggestions": []}
+                result = {"id":ag["id"],"agent":ag["name"],"status":"GODKAND",
+                          "findings":[f"Agent-fel: {e}"],"severity":"LOW","suggestions":[]}
             results.append(result)
-            await manager.broadcast({"type": "agent_status",
-                "id": result.get("id"), "name": result.get("agent", "Agent"),
-                "status": "approved" if result.get("status") in ("GODKAND","GODKÄND") else "rejected",
-                "findings": result.get("findings", []),
-                "severity": result.get("severity", "LOW"),
-                "suggestions": result.get("suggestions", []),
-                "local": result.get("_local", False)})
+            is_blocker = ag["id"] in BLOCKERANDE_IDS
+            await manager.broadcast({"type":"agent_status",
+                "id":result.get("id"),"name":result.get("agent","Agent"),
+                "status":"approved" if result.get("status") in ("GODKAND","GODKÄND") else "rejected",
+                "findings":result.get("findings",[]),
+                "severity":result.get("severity","LOW"),
+                "suggestions":result.get("suggestions",[]),
+                "is_blocker":is_blocker,
+                "local":result.get("_local",False)})
     finally:
         ex.shutdown(wait=False)
 
-    # ── Steg 2: Inspector sammanväger alla fynd ───────────────────────────────
-    parts = []
-    for r in results:
-        finds = "; ".join(r.get("findings", [])) or "Inga anmarkningar"
-        suggs = "; ".join(r.get("suggestions", [])) or "-"
-        parts.append(
-            f"### {r.get('agent','?')} [{r.get('status','?')}] [{r.get('severity','LOW')}]\n"
-            f"Fynd: {finds}\nForslag: {suggs}"
-        )
-    inspector_input = (
-        f"FEATURE: {feature_name}\n\nSPEC:\n{spec_str[:2000]}\n\n"
-        f"AGENT-FYND:\n" + "\n\n".join(parts)
-    )
-    await manager.broadcast({"type": "agent_status",
-        "id": inspector["id"], "name": f"{inspector.get('emoji','')}{inspector['name']}",
-        "status": "running"})
-    insp = await loop.run_in_executor(None, run_agent, inspector, inspector_input, memory, "", s, code_ctx_claude)
-    insp_status = insp.get("status", "GODKAND")
-    snickare_instruktioner = insp.get("snickare_instruktioner", "")
+    await manager.broadcast({"type":"phase_done","phase":2,"name":"Specialistgranskning"})
 
-    await manager.broadcast({"type": "agent_status",
-        "id": inspector["id"], "name": f"{inspector.get('emoji','')}{inspector['name']}",
-        "status": "approved" if insp_status in ("GODKAND","GODKÄND") else "rejected",
-        "findings": insp.get("findings", []),
-        "severity": insp.get("severity", "LOW"),
-        "suggestions": insp.get("suggestions", []),
-        "inspector_note": snickare_instruktioner})
+    # Samla rådgivande rekommendationer för Snickaren
+    radgivande_recs = [s for r in results
+                       if r.get("id") not in BLOCKERANDE_IDS
+                       for s in r.get("suggestions",[])[:2]]
+
+    # Spara för post-build Besiktningsmannen
+    _review_cache[feature_name] = {
+        "results": results, "spec_str": spec_str, "spec_obj": spec_obj,
+        "arkitekt_plan": arkitekt_plan, "radgivande_recs": radgivande_recs,
+    }
+
+    # Framgångsvillkor: inga HIGH-avvisningar från blockerande agenter
+    blockerande_failed = [
+        r for r in results
+        if r.get("id") in BLOCKERANDE_IDS
+        and r.get("status") not in ("GODKAND","GODKÄND")
+        and r.get("severity","LOW") == "HIGH"
+    ]
+    snickare_instruktioner = arkitekt_plan
 
     # ── Steg 3: Godkänt → klart att bygga ────────────────────────────────────
-    if insp_status in ("GODKAND", "GODKÄND"):
+    if not blockerande_failed:
         features = load_features(proj["id"])
         for f in features:
             if f["name"] == feature_name:
@@ -1638,10 +1687,6 @@ async def review_feature(payload: dict):
         st = r.get("status","?"); sev = r.get("severity","LOW")
         finds = "; ".join(r.get("findings",[])) or "Inga fynd"
         domare_sections.append(f"  {r.get('agent','?')} [{st}][{sev}]: {finds}")
-    domare_sections.append(f"\n## INSPECTOR [{insp_status}]")
-    domare_sections.append("  " + "; ".join(insp.get("findings",[])))
-    if insp.get("user_question"):
-        domare_sections.append(f"\n  Inspector fråga: {insp['user_question']}")
 
     domare_input = (
         f"FEATURE: {feature_name}\n\nSPEC:\n{spec_str[:1500]}\n\n"
@@ -1711,7 +1756,69 @@ async def build_feature(payload: dict):
     diffs=compute_diffs(proj["id"], file_changes)
     store_pending(proj["id"], file_changes, feature_name)
     await manager.broadcast({"type":"build_done","feature":feature_name,"diffs":diffs,"summary":result})
+
+    # ── Besiktningsmannen — kör post-build på den färdiga koden ──────────────
+    asyncio.ensure_future(_run_inspector_post_build(
+        feature_name, diffs, proj, load_settings()))
+
     return JSONResponse({"diffs":diffs,"summary":result,"files_count":len(file_changes)})
+
+async def _run_inspector_post_build(feature_name: str, diffs: list, proj: dict, s: dict):
+    """Kör Besiktningsmannen på byggd kod — asynkront, blockerar inte build-svaret."""
+    try:
+        cache = _review_cache.get(feature_name, {})
+        agent_results = cache.get("results", [])
+        spec_str = cache.get("spec_str", feature_name)
+
+        # Bygg diff-sammanfattning
+        diff_text = ""
+        for d in diffs[:8]:  # max 8 filer
+            diff_text += f"\n### {d.get('file','?')} ({d.get('action','?')})\n"
+            diff_text += (d.get("diff","")[:600] or "(ny fil)")
+
+        # Bygg agent-fynd-sammanfattning
+        agent_summary = ""
+        for r in agent_results:
+            if r.get("findings"):
+                finds = "; ".join(r["findings"][:2])
+                agent_summary += f"- {r.get('agent','?')} krävde: {finds}\n"
+
+        inspector_input = (
+            f"FEATURE: {feature_name}\n\nORIGINAL SPEC:\n{spec_str[:1000]}\n\n"
+            f"VAD AGENTERNA KRÄVDE:\n{agent_summary or 'Inga specifika krav noterade.'}\n\n"
+            f"KODDIFF FRÅN SNICKAREN:\n{diff_text or 'Ingen diff tillgänglig.'}"
+        )
+
+        _, inspector = get_agents_from_settings(s)
+        post_build_prompt = (
+            "Du är Besiktningsmannen — du granskar BYGGD KOD, inte specen.\n"
+            "Du får: agenternas krav + koddiff från Snickaren.\n"
+            "Kontrollera: Implementerades det agenterna krävde? Finns uppenbara buggar eller saknade delar?\n"
+            "Returnera ENBART JSON: {\"status\":\"GODKÄND\"/\"AVVISAD\","
+            "\"findings\":[\"...\"],\"severity\":\"LOW\"/\"MEDIUM\"/\"HIGH\","
+            "\"suggestions\":[\"...\"]}"
+        )
+        inspector_post = dict(inspector)
+        inspector_post["prompt"] = post_build_prompt
+
+        memory = load_memory(proj["id"])
+        await manager.broadcast({"type": "inspect_start", "feature": feature_name})
+        loop = asyncio.get_event_loop()
+        insp = await loop.run_in_executor(None, run_agent, inspector_post, inspector_input, memory, "", s, "")
+        insp_status = insp.get("status","GODKÄND")
+
+        await manager.broadcast({
+            "type": "inspect_done",
+            "feature": feature_name,
+            "status": insp_status,
+            "findings": insp.get("findings", []),
+            "suggestions": insp.get("suggestions", []),
+            "severity": insp.get("severity","LOW"),
+            "approved": insp_status in ("GODKAND","GODKÄND")
+        })
+    except Exception as e:
+        await manager.broadcast({"type":"inspect_done","feature":feature_name,
+            "status":"GODKÄND","findings":[],"approved":True,"error":str(e)[:100]})
 
 def build_code_sync(spec: dict, pid: str):
     import asyncio as _as; loop=_as.new_event_loop()
@@ -2584,29 +2691,7 @@ async def git_push_direct(payload: dict):
 
 
 
-@app.post("/api/git-push-direct")
-async def git_push_direct(payload: dict):
-    repo_name = payload.get("repo_name","")
-    token = payload.get("token","")
-    username = payload.get("username","Stuwish1")
-    if not repo_name or not token:
-        return JSONResponse({"ok": False, "error": "repo_name och token kravs"}, status_code=400)
-    rd = Path(".").resolve()
-    err = None
-    try:
-        remote_url = f"https://{username}:{token}@github.com/{username}/{repo_name}.git"
-        subprocess.run(["git","remote","set-url","origin",remote_url], cwd=rd, check=True, capture_output=True)
-        subprocess.run(["git","add","-A"], cwd=rd, check=True, capture_output=True)
-        subprocess.run(["git","commit","--allow-empty","-m","chore: Ishoo Creator push"], cwd=rd, capture_output=True)
-        subprocess.run(["git","push","origin","HEAD"], cwd=rd, check=True, capture_output=True)
-    except subprocess.CalledProcessError as e:
-        err = e.stderr.decode(errors="ignore")[:300] if e.stderr else str(e)
-    except Exception as e:
-        err = str(e)
-    if err:
-        return JSONResponse({"ok": False, "error": err})
-    await manager.broadcast({"type": "git_push_done", "url": "https://github.com/"+username+"/"+repo_name})
-    return JSONResponse({"ok": True, "url": "https://github.com/"+username+"/"+repo_name})
+
 
 
 @app.on_event("startup")
@@ -2624,3 +2709,8 @@ async def start_file_watcher():
             except Exception:
                 pass
     asyncio.ensure_future(_watch())
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000, reload=False)

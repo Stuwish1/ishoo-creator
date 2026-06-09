@@ -46,7 +46,7 @@
     "id": 4,
     "name": "Clipboard Image Input: Implementera Clipboard Image Input — frontend (index.html)",
     "phase": "MVP",
-    "status": "Planerad",
+    "status": "Blockerad",
     "parent_feature": "Clipboard Image Input",
     "spec": {
       "name": "Clipboard Image Input: Implementera Clipboard Image Input — frontend (index.html)",
@@ -148,5 +148,63 @@
       "källa": "Säkerhetsansvarig"
     },
     "created": "2026-06-09T02:39:50.386016"
+  },
+  {
+    "id": 11,
+    "name": "Clipboard Image Input: Implementera Clipboard Image Input — frontend (index.html): Fixa duplicerad git_push_direct",
+    "phase": "MVP",
+    "status": "Planerad",
+    "parent_feature": "Clipboard Image Input: Implementera Clipboard Image Input — frontend (index.html)",
+    "spec": {
+      "name": "Clipboard Image Input: Implementera Clipboard Image Input — frontend (index.html): Fixa duplicerad git_push_direct",
+      "description": "I app.py: ta bort den andra definitionen av endpoint 'git_push_direct' på rad 2632 (hela funktionen från @app.post på rad 2631 till slutet av funktionskroppen). Behåll definitionen på rad 2603-2630. Verifiera att bara EN git_push_direct-definition finns kvar. Använd Python direct write (read hela filen, ta bort raderna, skriv tillbaka). Filen är 132kb — använd ALDRIG Edit-verktyget.",
+      "beroende_av": []
+    },
+    "created": "2026-06-09T03:04:45.634701"
+  },
+  {
+    "id": 12,
+    "name": "Clipboard Image Input: Implementera Clipboard Image Input — frontend (index.html): Definiera Vision API payload-format",
+    "phase": "MVP",
+    "status": "Planerad",
+    "parent_feature": "Clipboard Image Input: Implementera Clipboard Image Input — frontend (index.html)",
+    "spec": {
+      "name": "Clipboard Image Input: Implementera Clipboard Image Input — frontend (index.html): Definiera Vision API payload-format",
+      "description": "Uppdatera feature-spec 'Clipboard Image Input: Komplettera spec med Vision API payload-format' med följande beslut: (1) Bilder skickas som base64-kodad string i JSON-body: {\"image_data\": \"data:image/jpeg;base64,...\", \"media_type\": \"image/jpeg\", \"message\": \"...\"}. (2) Stödda format: image/jpeg, image/png, image/gif, image/webp. (3) Maxstorlek: 5MB innan base64-kodning. (4) Backend-endpoint: POST /api/chat tar emot detta payload och vidarebefordrar till Anthropic Vision API. Uppdatera features.json för detta projekt och sätt status till 'Klar'. Detta är ett konfigurationsbeslut som kräver användarens godkännande.",
+      "beroende_av": [
+        "Clipboard Image Input: Implementera Clipboard Image Input — frontend (index.html): Fixa duplicerad git_push_direct"
+      ]
+    },
+    "created": "2026-06-09T03:04:45.634796"
+  },
+  {
+    "id": 13,
+    "name": "Clipboard Image Input: Implementera Clipboard Image Input — frontend (index.html): Komplettera frontend-spec med acceptanskriterier",
+    "phase": "MVP",
+    "status": "Planerad",
+    "parent_feature": "Clipboard Image Input: Implementera Clipboard Image Input — frontend (index.html)",
+    "spec": {
+      "name": "Clipboard Image Input: Implementera Clipboard Image Input — frontend (index.html): Komplettera frontend-spec med acceptanskriterier",
+      "description": "Uppdatera spec-objektet för feature 'Implementera Clipboard Image Input — frontend' i features.json med: acceptanskriterier: ['Paste-event lyssnas på document-nivå', 'Bild visas i .chat-img-previews container (samma mönster som drag-drop)', 'Remove-knapp tar bort bild från preview', 'Icke-bildpaste ignoreras tyst', 'Maxstorlek 5MB — fel visas via addMsg om större', 'Stödda format: jpeg/png/gif/webp', 'Preview-storlek: 64px (tillgänglighet)', 'Paste kompletterar (inte ersätter) drag-drop', 'aria-label på remove-knapp: Ta bort bild', 'Alt-text på preview-img: Inklistrad bild']. Sätt status till 'Planerad' (klar för byggstart). Detta kräver användarens godkännande av acceptanskriterierna.",
+      "beroende_av": [
+        "Clipboard Image Input: Implementera Clipboard Image Input — frontend (index.html): Definiera Vision API payload-format"
+      ]
+    },
+    "created": "2026-06-09T03:04:45.634801"
+  },
+  {
+    "id": 14,
+    "name": "Clipboard Image Input: Implementera Clipboard Image Input — frontend (index.html): Implementera paste-event listener i index.html",
+    "phase": "MVP",
+    "status": "Planerad",
+    "parent_feature": "Clipboard Image Input: Implementera Clipboard Image Input — frontend (index.html)",
+    "spec": {
+      "name": "Clipboard Image Input: Implementera Clipboard Image Input — frontend (index.html): Implementera paste-event listener i index.html",
+      "description": "Läs index.html med Python (filen är 135kb — ALDRIG Edit-verktyget). Lägg till i JS-sektionen: (1) Global array 'pastedImages = []' för att hålla base64-bilder. (2) document.addEventListener('paste', handlePaste) där handlePaste: itererar e.clipboardData.items, filtrerar på item.type.startsWith('image/'), läser som File, kontrollerar size <= 5MB (annars addMsg fel), läser som dataURL via FileReader, pushar till pastedImages[], anropar renderImagePreviews(). (3) renderImagePreviews() rensar .chat-img-previews, skapar .chat-img-preview divs med img (alt='Inklistrad bild', width/height 64px) och remove-knapp (aria-label='Ta bort bild', onclick tar bort från pastedImages[] och anropar renderImagePreviews()). (4) I sendMessage(): om pastedImages.length > 0, inkludera image_data i payload till /api/chat, töm pastedImages[] och renderImagePreviews() efter skickat. Skriv tillbaka hela filen med Python write.",
+      "beroende_av": [
+        "Clipboard Image Input: Implementera Clipboard Image Input — frontend (index.html): Komplettera frontend-spec med acceptanskriterier"
+      ]
+    },
+    "created": "2026-06-09T03:04:45.634803"
   }
 ]

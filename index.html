@@ -942,10 +942,50 @@ function handleWS(msg){
     }
     loadFeatures();
   }
+  else if(msg.type==='phase_start'){
+    const phaseNames={1:'📐 Arkitektritning',2:'🔍 Specialistgranskning'};
+    const nm=phaseNames[msg.phase]||msg.name||`Fas ${msg.phase}`;
+    setProgress(msg.phase===1?5:30, nm+'...');
+    addMsg('assistant',`<strong>${nm}</strong> startar...`,true);
+  }
+  else if(msg.type==='phase_done'){
+    if(msg.phase===1&&msg.plan){
+      addMsg('assistant',`<strong>📐 Arkitektplan klar:</strong><br><pre style="font-size:10px;white-space:pre-wrap;max-height:120px;overflow:auto;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:6px;margin-top:4px">${msg.plan.replace(/</g,'&lt;').slice(0,600)}</pre>`,true);
+    }
+    if(msg.phase===2){
+      setProgress(70,'Specialistgranskning klar');
+    }
+  }
   else if(msg.type==='domare_start'){
     setProgress(5,'⚖️ Domaren analyserar alla misslyckanden...');
     addMsg('assistant',`⚖️ Pipelinen misslyckades ${msg.iterations} gånger. **Domaren** analyserar nu alla iterationers rapporter...`);
     setAgent('domare','running',['Analyserar alla misslyckanden...']);
+  }
+  else if(msg.type==='inspect_start'){
+    addMsg('assistant','🔍 <strong>Besiktningsmannen</strong> granskar den byggda koden...');
+    setProgress(85,'🔍 Besiktningsmannen kontrollerar bygget...');
+  }
+  else if(msg.type==='inspect_done'){
+    const ok=msg.approved;
+    const finds=(msg.findings||[]).filter(f=>f&&f.length>5);
+    const sev=msg.severity||'LOW';
+    if(ok){
+      const warn = finds.length>0
+        ? `<br><div style="margin-top:6px;font-size:11px;color:var(--muted)">📋 Noteringar: ${finds.map(f=>`<br>• ${f}`).join('')}</div>`
+        : '';
+      addMsg('assistant',`✅ <strong>Besiktningsmannen godkänner bygget!</strong>${warn}`,true);
+      setProgress(100,'✅ Besiktning klar — redo att pusha');
+    } else {
+      const findsHtml=finds.map(f=>`<li style="margin:3px 0">${f}</li>`).join('');
+      const suggs=(msg.suggestions||[]).map(s=>`<li style="margin:3px 0;color:var(--muted)">${s}</li>`).join('');
+      addMsg('assistant',`
+        <div>⚠️ <strong>Besiktningsmannen hittar problem i den byggda koden:</strong></div>
+        <ul style="margin:6px 0 0 12px;font-size:12px">${findsHtml}</ul>
+        ${suggs?`<div style="margin-top:6px;font-size:11px;font-weight:600">Förslag:</div><ul style="margin:4px 0 0 12px;font-size:11px">${suggs}</ul>`:''}
+        <div style="margin-top:8px;font-size:11px;color:var(--muted)">Du kan ändå pusha och fixa i nästa iteration, eller lös problemen först.</div>
+      `,true);
+      setProgress(90,'⚠️ Besiktning — problem hittades');
+    }
   }
   else if(msg.type==='build_start') setProgress(5,`Snickaren bygger...`);
   else if(msg.type==='build_progress') setProgress(40,msg.message);
@@ -1995,95 +2035,109 @@ async function saveSettings(){
   payload.max_iterations=parseInt(document.getElementById('s-max-iter').value)||3;
   payload.model_projektledare=document.getElementById('s-model-pl').value;
   payload.model_snickare=document.getElementById('s-model-snickare').value;
-  payload.model_haiku=document.getElementById('s-model-haiku').value;
-  await fetch(`${API}/api/settings`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
-  try{
-    const pr=await fetch(`${API}/api/projects`);const pd=await pr.json();
-    const active=pd.projects.find(p=>p.id===pd.active);
-    if(active){
-      const vercelToken=document.getElementById('ps-vercel-token').value;
-      if(vercelToken) await fetch(`${API}/api/settings`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({vercel_token:vercelToken,vercel_team_id:document.getElementById('ps-vercel-team').value||''})});
-      const psp={github:document.getElementById('ps-github').value,
-        supabase_dev_url:document.getElementById('ps-supa-dev-url').value,
-        supabase_dev_key:document.getElementById('ps-supa-dev-key').value,
-        supabase_prod_url:document.getElementById('ps-supa-prod-url').value,
-        supabase_prod_key:document.getElementById('ps-supa-prod-key').value,
-        vercel_project_name:document.getElementById('ps-vercel-project').value};
-      await fetch(`${API}/api/projects/${active.id}/settings`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(psp)});
-    }
-  }catch{}
-  closeSettings();addMsg('assistant','✅ Inställningar sparade!');
-  }catch(e){alert('Fel vid sparning: '+e);}
+  l_vercel=document.getElementById('s-vercel-token')?.value||'';
+  if(payload_vercel) payload.vercel_token=payload_vercel;
+  const payload_team=document.getElementById('s-vercel-team')?.value||'';
+  if(payload_team) payload.vercel_team_id=payload_team;
+  const r=await fetch(`${API}/api/settings`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+  if(r.ok){addMsg('assistant','✅ Inställningar sparade!');}
+  else{addMsg('assistant','❌ Kunde inte spara inställningar.');}
+  }catch(e){addMsg('assistant','❌ Fel vid sparande: '+e.message);}
 }
 
-async function loadArch(){
-  try{const r=await fetch(`${API}/api/architecture`);const d=await r.json();
-    document.getElementById('archText').textContent=d.content||'Ingen arkitekturkarta ännu.\nKlona repot och klicka "Generera".';}
-  catch{}
-}
-
-async function generateArch(){
-  document.getElementById('archText').textContent='Genererar arkitekturkarta...';
-  try{const r=await fetch(`${API}/api/architecture/generate`,{method:'POST'});const d=await r.json();
-    document.getElementById('archText').textContent=d.content||d.error||'Fel';
-  }catch{document.getElementById('archText').textContent='Kunde inte generera. Är repot klonat?';}
-}
-
-function editArch(){
-  const pre=document.getElementById('archText');
-  const current=pre.textContent;
-  const ta=document.createElement('textarea');
-  ta.style.cssText='width:100%;height:300px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:8px;font-size:11px;font-family:monospace;outline:none;resize:vertical;';
-  ta.value=current;pre.replaceWith(ta);
-  const saveBtn=document.createElement('button');
-  saveBtn.textContent='Spara';saveBtn.className='btn btn-green';saveBtn.style.cssText='font-size:11px;padding:5px 12px;margin-top:6px;';
-  saveBtn.onclick=async()=>{
-    await fetch(`${API}/api/architecture`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({content:ta.value})});
-    const newPre=document.createElement('pre');newPre.id='archText';newPre.style.cssText='font-size:11px;font-family:monospace;line-height:1.6;color:var(--muted);white-space:pre-wrap;word-break:break-word;';
-    newPre.textContent=ta.value;ta.replaceWith(newPre);saveBtn.remove();
-  };
-  ta.parentNode.insertBefore(saveBtn,ta.nextSibling);ta.focus();
-}
+// ═══════════════════════════════════════════════════
+// AGENT PIPELINE RENDERING
+// ═══════════════════════════════════════════════════
 
 function renderAgents(agents){
-  currentAgents=agents.length?agents:[
-    {id:'kravanalytiker',name:'🔍 Kravanalytikorn'},{id:'beroendeanalytiker',name:'🔗 Beroendeanalytikorn'},
-    {id:'strukturnavigator',name:'🗺️ Strukturnavigatorn'},{id:'security',name:'🔒 Säkerhetsansvarig'},
-    {id:'dba',name:'🗄️ DBA'},{id:'architect',name:'🏗️ Arkitekt'},
-    {id:'ansvarsfordelning',name:'⚖️ Ansvarsfördelning'},{id:'typgranskare',name:'🔷 Typgranskaren'},
-    {id:'felhantering',name:'🚨 Felhanteringsgranskaren'},{id:'tillganglighet',name:'♿ Tillgänglighetsgranskaren'},
-    {id:'konfiguration',name:'⚙️ Konfigurationsgranskaren'},{id:'performance',name:'⚡ Prestanda'},
-    {id:'ux',name:'🎨 UX-granskare'},{id:'mobile',name:'📱 Mobil/Fält'},
-    {id:'tester',name:'🧪 Testbarhet'},{id:'inspector',name:'✅ Besiktningsman'},
+  // Uppdaterar nuvarande agentlista — med fasstöd
+  const defaults = [
+    {id:'arkitekt_fas',name:'📐 Chefarkitekt',phase:1},
+    {id:'security',name:'🔒 Säkerhetsansvarig',phase:2,is_blocker:true},
+    {id:'dba',name:'🗄️ DBA',phase:2,is_blocker:true},
+    {id:'felhantering',name:'🚨 Felhantering',phase:2,is_blocker:true},
+    {id:'typgranskare',name:'🔷 Typgranskaren',phase:2,is_blocker:true},
+    {id:'beroendeanalytiker',name:'🔗 Beroendeanalytikorn',phase:2,is_blocker:true},
+    {id:'kravanalytiker',name:'🔍 Kravanalytikorn',phase:2,is_blocker:false},
+    {id:'strukturnavigator',name:'🗺️ Strukturnavigatorn',phase:2,is_blocker:false},
+    {id:'architect',name:'🏗️ Arkitekt',phase:2,is_blocker:false},
+    {id:'ansvarsfordelning',name:'⚖️ Ansvarsfördelning',phase:2,is_blocker:false},
+    {id:'tillganglighet',name:'♿ Tillgänglighet',phase:2,is_blocker:false},
+    {id:'konfiguration',name:'⚙️ Konfiguration',phase:2,is_blocker:false},
+    {id:'performance',name:'⚡ Prestanda',phase:2,is_blocker:false},
+    {id:'ux',name:'🎨 UX-granskare',phase:2,is_blocker:false},
+    {id:'mobile',name:'📱 Mobil/Fält',phase:2,is_blocker:false},
+    {id:'tester',name:'🧪 Testbarhet',phase:2,is_blocker:false},
     {id:'domare',name:'⚖️ Domaren',is_domare:true},
   ];
-  _agentLog={};  // Rensa logg vid ny granskning
-  document.getElementById('agentList').innerHTML=currentAgents.map(a=>{
+  currentAgents = agents.length ? agents : defaults;
+  _agentLog = {};
+
+  // Gruppera per fas
+  const fas1 = currentAgents.filter(a=>a.phase===1);
+  const fas2blocker = currentAgents.filter(a=>a.phase===2 && a.is_blocker);
+  const fas2rad = currentAgents.filter(a=>a.phase===2 && !a.is_blocker);
+  const domare = currentAgents.filter(a=>a.is_domare||a.id==='domare');
+  const ungrouped = currentAgents.filter(a=>!a.phase&&!a.is_domare&&a.id!=='domare');
+
+  function agentRow(a){
     const isDom = a.is_domare||a.id==='domare';
-    const rowStyle = isDom ? 'border-top:2px solid var(--border);margin-top:4px;' : '';
     const pillInit = isDom ? 's-domare' : 's-waiting';
-    const pillTxt  = isDom ? 'Vilar' : 'Väntar';
-    return `<div class="agent-row" id="row-${a.id}" style="${rowStyle}">
+    const pillTxt = isDom ? 'Vilar' : 'Väntar';
+    return `<div class="agent-row" id="row-${a.id}">
       <div class="agent-row-top">
         <div class="agent-name">${a.name}</div>
         <span class="s-pill ${pillInit}" id="pill-${a.id}">${pillTxt}</span>
       </div>
       <div class="agent-findings" id="findings-${a.id}"></div>
     </div>`;
-  }).join('');
+  }
+
+  function phaseHeader(label, color){
+    return `<div style="padding:4px 8px 2px;font-size:9px;font-weight:700;color:${color};text-transform:uppercase;letter-spacing:.06em;margin-top:6px">${label}</div>`;
+  }
+
+  let html = '';
+  if(fas1.length){
+    html += phaseHeader('Fas 1 — Arkitektritning','#6366f1');
+    html += fas1.map(agentRow).join('');
+  }
+  if(fas2blocker.length){
+    html += phaseHeader('Fas 2 — Blockerande','#e55');
+    html += fas2blocker.map(agentRow).join('');
+  }
+  if(fas2rad.length){
+    html += phaseHeader('Fas 2 — Rådgivande','#f59e0b');
+    html += fas2rad.map(agentRow).join('');
+  }
+  if(ungrouped.length){
+    html += phaseHeader('Agenter','#6366f1');
+    html += ungrouped.map(agentRow).join('');
+  }
+  if(domare.length){
+    html += `<div style="border-top:2px solid var(--border);margin-top:6px">`;
+    html += domare.map(agentRow).join('');
+    html += `</div>`;
+  }
+  document.getElementById('agentList').innerHTML = html || defaults.map(agentRow).join('');
 }
 
 function setAgent(id,status,findings=[],extra={}){
   const pill=document.getElementById(`pill-${id}`);if(!pill)return;
-  const m={waiting:['s-waiting','Väntar'],running:['s-running','Kör...'],approved:['s-approved','Godkänd'],rejected:['s-rejected','Avvisad']};
+  const isDom=id==='domare';
+  const m={
+    waiting:['s-waiting','Väntar'],
+    running: isDom?['s-domare-active','Analyserar...']:['s-running','Kör...'],
+    approved:['s-approved','Godkänd'],
+    rejected:['s-rejected','Avvisad']
+  };
   const[cls,lbl]=m[status]||m.waiting;
   pill.className=`s-pill ${cls}`;pill.textContent=lbl;
   const fd=document.getElementById(`findings-${id}`);
-  if(fd) fd.innerHTML=findings.map(f=>`<div class="finding">${f}</div>`).join('');
-  // Spara i logg för kopiering
-  const agentName = currentAgents.find(a=>a.id===id)?.name || id;
+  if(fd) fd.innerHTML=findings.filter(f=>f&&f.length>2).map(f=>`<div class="finding">${f}</div>`).join('');
+  const agentName=currentAgents.find(a=>a.id===id)?.name||id;
   if(status==='approved'||status==='rejected'){
-    _agentLog[id]={name:agentName, status, findings:[...findings], suggestions:extra.suggestions||[]};
+    _agentLog[id]={name:agentName,status,findings:[...findings],suggestions:extra.suggestions||[]};
   }
 }
 
@@ -2093,292 +2147,35 @@ function setProgress(pct,lbl){
 }
 
 function addMsg(role,text,isHtml=false){
-  const msgs=document.getElementById('messages');const div=document.createElement('div');div.className=`msg ${role}`;
+  const msgs=document.getElementById('messages');
+  const div=document.createElement('div');
+  div.className=`msg ${role}`;
   const now=new Date().toLocaleTimeString('sv-SE',{hour:'2-digit',minute:'2-digit'});
-  const html=isHtml?text:text.replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>').replace(/`([^`]+)`/g,'<code>$1</code>').replace(/\n/g,'<br>');
-  div.innerHTML=`<div class="msg-bubble">${html}</div><div class="msg-time">${now}</div>`;
-  msgs.appendChild(div);msgs.scrollTop=msgs.scrollHeight;
-  // Spara i localStorage (max 40 meddelanden)
-  try{
-    const proj=window._activeProjectId||'default';
-    const key='chat_'+proj;
-    const hist=JSON.parse(localStorage.getItem(key)||'[]');
-    hist.push({role,html,time:now});
-    if(hist.length>40)hist.splice(0,hist.length-40);
-    localStorage.setItem(key,JSON.stringify(hist));
-  }catch(e){}
+  if(isHtml){
+    div.innerHTML=`<div class="msg-time">${now}</div><div>${text}</div>`;
+  } else {
+    const escaped=text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+      .replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>').replace(/\n/g,'<br>');
+    div.innerHTML=`<div class="msg-time">${now}</div><div>${escaped}</div>`;
+  }
+  msgs.appendChild(div);
+  msgs.scrollTop=msgs.scrollHeight;
+  if(role==='user'||role==='assistant'){
+    chatHistory.push({role:role==='user'?'user':'assistant',content:text});
+    if(chatHistory.length>40)chatHistory=chatHistory.slice(-40);
+    saveChatHistory();
+  }
 }
 
+function saveChatHistory(){try{localStorage.setItem('chatHistory_'+location.search,JSON.stringify(chatHistory));}catch(e){}}
 function restoreChatHistory(){
   try{
-    const proj=window._activeProjectId||'default';
-    const hist=JSON.parse(localStorage.getItem('chat_'+proj)||'[]');
-    const msgs=document.getElementById('messages');
-    if(!hist.length){
-      // Visa välkomstmeddelande om ingen historik finns
-      const now=new Date().toLocaleTimeString('sv-SE',{hour:'2-digit',minute:'2-digit'});
-      const div=document.createElement('div');div.className='msg assistant';
-      div.innerHTML=`<div class="msg-bubble">Välkommen till <strong>Ishoo Creator!</strong><br><br>Skapa ett projekt med <strong>+</strong> och berätta vad du vill bygga.<br><br>💡 <em>Tips: Du kan också säga "Lägg till en agent som kollar X" eller "Ändra max iterationer" — jag hjälper dig konfigurera systemet också.</em></div><div class="msg-time">${now}</div>`;
-      msgs.appendChild(div);
-      return;
-    }
-    hist.forEach(m=>{
-      const div=document.createElement('div');div.className=`msg ${m.role}`;
-      div.innerHTML=`<div class="msg-bubble">${m.html}</div><div class="msg-time">${m.time||''}</div>`;
-      msgs.appendChild(div);
-    });
-    msgs.scrollTop=msgs.scrollHeight;
+    const h=JSON.parse(localStorage.getItem('chatHistory_'+location.search)||'[]');
+    chatHistory=h;
+    h.slice(-20).forEach(m=>addMsg(m.role==='user'?'user':'assistant',m.content));
   }catch(e){}
 }
 
-function clearChatForProject(pid){
-  try{localStorage.removeItem('chat_'+(pid||'default'));}catch(e){}
-  chatHistory=[];document.getElementById('messages').innerHTML='';
-}
-function showTyping(){
-  const msgs=document.getElementById('messages');const id='t'+Date.now();
-  const div=document.createElement('div');div.id=id;div.className='msg assistant';
-  div.innerHTML='<div class="msg-bubble"><div class="typing"><span></span><span></span><span></span></div></div>';
-  msgs.appendChild(div);msgs.scrollTop=msgs.scrollHeight;return id;
-}
-function removeTyping(id){document.getElementById(id)?.remove();}
-
-function openNewProject(){document.getElementById('npModal').classList.add('open');setTimeout(()=>document.getElementById('pName').focus(),80);}
-function closeNewProject(){document.getElementById('npModal').classList.remove('open');['pName','pDesc','pGithub'].forEach(id=>document.getElementById(id).value='');}
-document.getElementById('npModal').addEventListener('click',e=>{if(e.target===document.getElementById('npModal'))closeNewProject();});
-document.getElementById('settingsModal').addEventListener('click',e=>{if(e.target===document.getElementById('settingsModal'))closeSettings();});
-document.getElementById('diffModal').addEventListener('click',e=>{if(e.target===document.getElementById('diffModal'))closeDiff();});
-document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeNewProject();closeDiff();closeSettings();closeErrorModal();closeHistory();}});
-
-async function createProject(){
-  const name=document.getElementById('pName').value.trim();if(!name){document.getElementById('pName').focus();return;}
-  try{
-    const r=await fetch(`${API}/api/projects`,{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({name,description:document.getElementById('pDesc').value.trim(),github:document.getElementById('pGithub').value.trim()})});
-    if(r.ok){
-      const d=await r.json();const pid=d.project.id;
-      closeNewProject();clearChatForProject(pid);
-      window._activeProjectId=pid;
-      renderAgents([]);loadAll();
-      onboardingProjectId=pid;onboardingHistory=[];
-      showOnboardingBanner(name);
-      addMsg('assistant','✅ <strong>'+name+'</strong> skapat! Alla minnesfiler är förberedda.\n\n🧠 <strong>Låt oss konfigurera projektet ordentligt</strong> — jag ställer några frågor för att förstå vad vi bygger.\n\nFörsta frågan: <strong>Vilka är de primära användarna och hur ser deras vardag ut?</strong>');
-    } else { const err=await r.text();alert('Fel: '+err); }
-  }catch(e){alert('Kunde inte nå servern.\nFel: '+e);}
-}
-
-function showOnboardingBanner(name){
-  let b=document.getElementById('onboardingBanner');
-  if(!b){
-    b=document.createElement('div');b.id='onboardingBanner';
-    b.style.cssText='background:rgba(99,102,241,.15);border-bottom:1px solid rgba(99,102,241,.4);padding:8px 16px;font-size:12px;display:flex;align-items:center;gap:10px;flex-shrink:0;';
-    const chat=document.getElementById('chatArea')||document.querySelector('.chat');
-    if(chat)chat.insertBefore(b,chat.firstChild);
-  }
-  b.innerHTML='<span style="color:#818cf8;font-weight:700;">🧠 Onboarding-läge</span><span style="color:#a5b4fc;flex:1;">Konfigurerar '+name+' — svara för att generera projektdocs</span><button onclick="skipOnboarding()" style="background:none;border:1px solid rgba(99,102,241,.4);color:#818cf8;border-radius:6px;padding:3px 10px;font-size:11px;cursor:pointer;font-family:inherit;">Hoppa över</button>';
-  b.style.display='flex';
-}
-
-function hideOnboardingBanner(){const b=document.getElementById('onboardingBanner');if(b)b.style.display='none';}
-function skipOnboarding(){onboardingProjectId=null;onboardingHistory=[];hideOnboardingBanner();addMsg('assistant','Onboarding hoppad.');}
-
-// PREVIEW
-let previewUrls={dev:'',prod:'',local:'http://localhost:5173'},previewEnv='dev';
-let devServerRunning=false;
-
-async function openPreview(){
-  document.getElementById('previewModal').classList.add('open');
-  await checkDevServerStatus();
-  if(previewEnv!=='local')await refreshPreview();
-  else switchPreview('local');
-}
-function closePreview(){document.getElementById('previewModal').classList.remove('open');}
-
-async function checkDevServerStatus(){
-  try{const r=await fetch(`${API}/api/dev-server/status`);const d=await r.json();devServerRunning=d.running;updateDevServerBtn();}catch{}
-}
-
-function updateDevServerBtn(){
-  const btn=document.getElementById('devServerBtn');if(!btn)return;
-  if(previewEnv==='local'){
-    btn.style.display='inline-block';
-    if(devServerRunning){btn.textContent='⏹ Stoppa';btn.style.cssText='font-size:11px;padding:3px 10px;background:rgba(239,68,68,.15);border:1px solid var(--red);color:var(--red);border-radius:6px;cursor:pointer;font-family:inherit;';}
-    else{btn.textContent='▶ Starta';btn.style.cssText='font-size:11px;padding:3px 10px;background:rgba(34,197,94,.15);border:1px solid var(--green);color:var(--green);border-radius:6px;cursor:pointer;font-family:inherit;';}
-  } else {btn.style.display='none';}
-}
-
-async function toggleDevServer(){
-  const btn=document.getElementById('devServerBtn');btn.disabled=true;btn.textContent='...';
-  if(devServerRunning){
-    await fetch(`${API}/api/dev-server/stop`,{method:'POST'});
-    devServerRunning=false;
-  } else {
-    const r=await fetch(`${API}/api/dev-server/start`,{method:'POST'});const d=await r.json();
-    if(d.error){alert('Kunde inte starta: '+d.error);btn.disabled=false;updateDevServerBtn();return;}
-    devServerRunning=true;
-    setTimeout(()=>{if(previewEnv==='local'){document.getElementById('previewFrame').style.display='block';document.getElementById('previewEmpty').style.display='none';document.getElementById('previewFrame').src='http://localhost:5173';}},3500);
-  }
-  btn.disabled=false;updateDevServerBtn();
-}
-
-function setPreviewWidth(w){
-  const frame=document.getElementById('previewFrame');
-  if(w==='100%'){frame.style.width='100%';frame.style.margin='0';}
-  else{frame.style.width=w+'px';frame.style.margin='0 auto';}
-}
-
-async function refreshPreview(){
-  document.getElementById('previewUrl').textContent='Hämtar URL...';
-  try{
-    const r=await fetch(`${API}/api/preview`);const d=await r.json();
-    previewUrls={...previewUrls,dev:d.dev_url||'',prod:d.prod_url||''};
-    if(d.error&&!d.dev_url&&!d.prod_url){showPreviewEmpty('Vercel ej konfigurerat',d.error,'Konfigurera Vercel',()=>{closePreview();openSettings();});return;}
-    showPreviewUrl(previewEnv);
-  }catch{document.getElementById('previewUrl').textContent='Kunde inte hämta URL';showPreviewEmpty();}
-}
-
-function showPreviewEmpty(title,msg,btnTxt,btnFn){
-  document.getElementById('previewEmptyTitle').textContent=title||'Ingen preview ännu';
-  document.getElementById('previewEmptyMsg').innerHTML=msg||'Konfigurera Vercel eller starta lokal dev-server.';
-  const btn=document.getElementById('previewEmptyBtn');
-  if(btnTxt){btn.textContent=btnTxt;btn.onclick=btnFn;btn.style.display='inline-block';}else{btn.style.display='none';}
-  document.getElementById('previewEmpty').style.display='flex';
-  document.getElementById('previewFrame').style.display='none';
-}
-
-function showPreviewUrl(env){
-  const url=previewUrls[env];
-  document.getElementById('previewUrl').textContent=url||'Ingen URL hittad';
-  const frame=document.getElementById('previewFrame');const empty=document.getElementById('previewEmpty');
-  if(url){frame.style.display='block';empty.style.display='none';frame.src=url;}
-  else{frame.style.display='none';empty.style.display='flex';}
-}
-
-function switchPreview(env){
-  previewEnv=env;
-  document.getElementById('prevBtnLocal').className='prev-tab'+(env==='local'?' active-dev':'');
-  document.getElementById('prevBtnDev').className='prev-tab'+(env==='dev'?' active-dev':'');
-  document.getElementById('prevBtnProd').className='prev-tab'+(env==='prod'?' active-prod':'');
-  updateDevServerBtn();
-  if(env==='local'){
-    if(devServerRunning){
-      document.getElementById('previewFrame').style.cssText='display:block;width:100%;';
-      document.getElementById('previewFrame').src='http://localhost:5173';
-      document.getElementById('previewEmpty').style.display='none';
-      document.getElementById('previewUrl').textContent='http://localhost:5173';
-    } else {
-      showPreviewEmpty('Lokal server avstängd','Starta dev-servern för att se din app direkt — ingen push krävs.','▶ Starta nu',toggleDevServer);
-    }
-  } else { refreshPreview(); }
-}
-
-function openInNewTab(){const url=previewUrls[previewEnv]||'http://localhost:5173';if(url)window.open(url,'_blank');}
-
-// FELKLISTRAREN
-function openErrorModal(){document.getElementById('errorModal').classList.add('open');setTimeout(()=>document.getElementById('errorInput').focus(),100);}
-function closeErrorModal(){document.getElementById('errorModal').classList.remove('open');}
-
-async function submitError(){
-  const errorText=document.getElementById('errorInput').value.trim();if(!errorText)return;
-  closeErrorModal();
-  addMsg('user','🐛 Fel att fixa:\n```\n'+errorText.slice(0,300)+(errorText.length>300?'...':'')+'\n```');
-  addMsg('assistant','🔍 Analyserar felet och hittar orsaken...');
-  try{
-    await fetch(`${API}/api/fix-error`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({error:errorText})});
-    document.getElementById('errorInput').value='';
-  }catch{addMsg('assistant','Kunde inte nå servern.');}
-}
-
-// VERSIONSHISTORIK
-function escHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
-
-async function openHistory(){
-  document.getElementById('historyModal').classList.add('open');
-  const list=document.getElementById('historyList');
-  list.innerHTML='<div style="color:var(--muted);font-size:12px;padding:8px;">Hämtar historik...</div>';
-  try{
-    const r=await fetch(`${API}/api/git/log`);const d=await r.json();
-    if(d.error){list.innerHTML='<div style="color:var(--red);font-size:12px;padding:8px;">'+escHtml(d.error)+'</div>';return;}
-    if(!d.commits||!d.commits.length){list.innerHTML='<div style="color:var(--muted);font-size:12px;padding:8px;">Inga commits ännu.</div>';return;}
-    list.innerHTML=d.commits.map((c,i)=>'<div style="display:flex;align-items:flex-start;gap:10px;padding:8px 10px;background:var(--surface);border:1px solid var(--border);border-radius:8px;">'
-      +'<div style="flex:1;min-width:0;"><div style="font-size:12px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+escHtml(c.message)+'</div>'
-      +'<div style="font-size:10px;color:var(--muted);margin-top:2px;">'+escHtml(c.ago)+' · '+escHtml(c.author)+' · <code style="font-size:10px;">'+c.hash.slice(0,8)+'</code></div></div>'
-      +(i===0?'<span style="font-size:10px;background:rgba(34,197,94,.15);color:var(--green);border-radius:99px;padding:2px 8px;flex-shrink:0;">Senaste</span>'
-        :'<button onclick="confirmRevert(\''+c.hash+'\',\''+escHtml(c.message).replace(/\'/g,"\\'")+'\',this)" style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:var(--red);border-radius:6px;padding:3px 10px;font-size:11px;cursor:pointer;flex-shrink:0;">Återgå</button>')
-      +'</div>').join('');
-  }catch(e){list.innerHTML='<div style="color:var(--red);font-size:12px;padding:8px;">Fel: '+e+'</div>';}
-}
-
-function closeHistory(){document.getElementById('historyModal').classList.remove('open');}
-
-async function confirmRevert(hash,msg,btn){
-  if(!confirm('Återgå till:\n"'+msg+'"\n\nDetta gör en force-push till dev-branch och raderar nyare commits. Fortsätta?'))return;
-  btn.textContent='...';btn.disabled=true;
-  try{
-    const r=await fetch(`${API}/api/git/revert`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({hash})});
-    const d=await r.json();
-    if(d.error){alert('Fel: '+d.error);btn.textContent='Återgå';btn.disabled=false;return;}
-    closeHistory();
-    addMsg('assistant','✅ Återgick till `'+hash.slice(0,8)+'`. Dev-branchen är uppdaterad.');
-  }catch(e){alert('Nätverksfel: '+e);btn.textContent='Återgå';btn.disabled=false;}
-}
-
-// INIT
-// ── Koppla chatInput-händelser direkt (körs när DOM är redo) ─────────────────
-(function setupChatInput(){
-  const inp = document.getElementById('chatInput');
-  const box = document.getElementById('chatInputBox');
-  if(!inp || !box) return;
-
-  // Enter skickar, Shift+Enter ny rad
-  inp.addEventListener('keydown', e => {
-    if(e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); sendMessage(); }
-  });
-
-  // Auto-resize
-  inp.addEventListener('input', () => {
-    inp.style.height = 'auto';
-    inp.style.height = Math.min(inp.scrollHeight, 200) + 'px';
-  });
-
-  // Drag & drop bilder
-  box.addEventListener('dragover', e => { e.preventDefault(); box.classList.add('drag-over'); });
-  box.addEventListener('dragleave', e => { if(!box.contains(e.relatedTarget)) box.classList.remove('drag-over'); });
-  box.addEventListener('drop', e => {
-    e.preventDefault(); box.classList.remove('drag-over');
-    const files = [...e.dataTransfer.files].filter(f => f.type.startsWith('image/'));
-    if(files.length) handleImgFiles(files);
-    else {
-      const url = e.dataTransfer.getData('text/uri-list') || e.dataTransfer.getData('text/plain');
-      if(url && url.match(/\.(png|jpg|jpeg|gif|webp)/i)) addImgUrl(url);
-    }
-  });
-
-  // Klistra in bild med Ctrl+V i chatInput
-  inp.addEventListener('paste', e => {
-    const items = [...e.clipboardData.items].filter(i => i.type.startsWith('image/'));
-    if(!items.length) return;
-    e.preventDefault();
-    e.stopPropagation();
-    items.forEach(item => { const f = item.getAsFile(); if(f) handleImgFiles([f]); });
-  });
-})();
-
-async function init(){
-  connectWS();
-  const r=await fetch(`${API}/api/projects`).catch(()=>null);
-  if(!r||!r.ok){addMsg('assistant','⚠️ Kan inte nå servern. Kör start.bat.');return;}
-  const data=await r.json();
-  loadAll();
-  window._activeProjectId = data.active || 'default';
-  restoreChatHistory();
-  const proj=data.projects.find(p=>p.id===data.active);
-  if(proj && !document.querySelector('.msg')){
-    addMsg('assistant','👋 Välkommen till <strong>Ishoo Creator</strong>!\n\nAktivt projekt: <strong>'+proj.name+'</strong>\n\nBeskriv vad du vill bygga, eller välj en feature från kön.',true);
-  }
-}
-
-init();
 </script>
 </body>
 </html>
