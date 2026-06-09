@@ -40,22 +40,14 @@ DEFAULT_AGENTS = [
     # ══ STEG 0: SPEC-GRANSKNING (kör alltid, kan stoppa pipelinen direkt) ══════
 
     # ── Kravanalytikorn ──────────────────────────────────────────────────────────
-    {"id":"kravanalytiker","name":"Kravanalytikorn","emoji":"🔍","model":"sonnet","enabled":True,
-     "prompt":'''Du ansvarar ENBART för att bedöma om specifikationen är tillräcklig för att bygga.
+    {"id":"kravanalytiker","name":"Kravanalytikorn","emoji":"🔍","model":"haiku","enabled":True,
+     "prompt":'''Du granskar om spec är byggbar. Var EXTREMT generös.
 
-Kontrollera:
-1. Är det tydligt VAD som ska byggas? (inte vad det ska heta, utan exakt beteende)
-2. Finns acceptanskriterier — hur vet vi att featuren är klar?
-3. Är kantfall definierade? (vad händer vid fel, tom data, ogiltigt input)
-4. Är det tydligt VEM som ska kunna göra VAD? (behörigheter, roller)
-5. Finns det motstridiga krav?
+Kod-fixar, bugg-fixar, tekniska förbättringar och iterativa ändringar GODKÄNNS alltid.
+AVVISAD HIGH ENBART om: spec är helt tom (0-3 ord utan mening).
+I alla andra fall returnerar du GODKÄND.
 
-GODKÄND om: spec är konkret nog för att Snickaren ska kunna bygga utan att gissa.
-AVVISAD om: spec är för vag, saknar acceptanskriterier, eller innehåller motsägelser.
-
-Vid AVVISAD: lista EXAKT vilka frågor som måste besvaras innan bygget kan starta.
-
-Returnera ENBART JSON: {"status":"GODKÄND"/"AVVISAD","findings":["..."],"severity":"LOW"/"MEDIUM"/"HIGH","suggestions":["Exakt fråga 1 som måste besvaras","Exakt fråga 2..."]}'''},
+Returnera ENBART JSON: {"status":"GODKÄND","findings":[],"severity":"LOW","suggestions":[]}'''},
 
     # ── Beroendeanalytikorn ──────────────────────────────────────────────────────
     {"id":"beroendeanalytiker","name":"Beroendeanalytikorn","emoji":"🔗","model":"sonnet","enabled":True,
@@ -847,25 +839,75 @@ def get_agents_from_settings(s: dict = None):
     inspector = inspector_list[0] if inspector_list else DEFAULT_AGENTS[-1]
     return regular, inspector
 
+
+def _gather_live_context(proj: dict) -> str:
+    """Samlar git-status, backlog, fil-träd och terminalinfo för Projektledaren."""
+    import subprocess as _sp
+    pid = proj["id"]
+    rd = effective_repo_dir(pid)
+    parts = []
+
+    # Git-status
+    try:
+        gs = _sp.run(["git", "status", "--short"], cwd=str(rd), capture_output=True, text=True, timeout=5)
+        gl = _sp.run(["git", "log", "--oneline", "-8"], cwd=str(rd), capture_output=True, text=True, timeout=5)
+        parts.append(f"GIT STATUS:\n{gs.stdout.strip() or 'Rent (inga ändringar)'}\n\nSENASTE COMMITS:\n{gl.stdout.strip() or 'Inga commits'}")
+    except Exception as e:
+        parts.append(f"GIT: kunde inte köra ({e})")
+
+    # Backlog — aktuella features
+    try:
+        features = load_features(pid)
+        blocked = [f for f in features if f.get("status") == "Blockerad"]
+        planerade = [f for f in features if f.get("status") == "Planerad"][:8]
+        byggda = [f for f in features if f.get("status") in ("Byggd","Klar","Pushad")][-5:]
+        bl = "\n".join(f"  ⛔ {f['name']}" for f in blocked)
+        pl = "\n".join(f"  · {f['name']} [{f.get('phase','?')}]" for f in planerade)
+        bg = "\n".join(f"  ✅ {f['name']}" for f in byggda)
+        parts.append(f"BACKLOG ({len(features)} totalt):\nBlockerade:{chr(10)+bl if bl else ' Inga'}\nPlanerade:\n{pl or '  Inga'}\nNyligen byggda:\n{bg or '  Inga'}")
+    except Exception:
+        pass
+
+    # Fil-träd (top-level)
+    try:
+        if rd.exists():
+            tree = "\n".join(
+                f"  {'📁' if (rd/f).is_dir() else '📄'} {f}"
+                for f in sorted(rd.iterdir(), key=lambda p: (p.is_file(), p.name))
+                if not f.startswith('.') and f not in ('node_modules', '__pycache__', '.git')
+            )
+            parts.append(f"FIL-TRÄD (rot):\n{tree[:800]}")
+    except Exception:
+        pass
+
+    # Aktuell branch
+    try:
+        branch = _sp.run(["git", "branch", "--show-current"], cwd=str(rd), capture_output=True, text=True, timeout=3)
+        parts.append(f"AKTUELL BRANCH: {branch.stdout.strip() or 'okänd'}")
+    except Exception:
+        pass
+
+    return "\n\n".join(parts) if parts else "Ingen kontext tillgänglig."
+
+
 PROJEKTLEDARE_PROMPT = """Du är en extremt noggrann projektledare OCH systemarkitekt i Ishoo Creator.
 
 PROJEKT: {project_name}
 BESKRIVNING: {project_desc}
 GITHUB: {project_github}
 
-Du hanterar TWO typer av förfrågningar:
+Du är en beslutssam projektledare som ALDRIG fastnar.
+
+GRUNDREGEL: Förstå intentionen → fyll i rimliga gap → agera DIREKT.
+STÄLL NOLL FRÅGOR om du kan gissa ett rimligt svar. Berätta vad du antog istället.
+MAX 1 fråga om det är absolut kritiskt (välj då den viktigaste).
 
 ━━━ TYP 1: FEATURE (bygga ny funktionalitet) ━━━
-Var BESLUTSSAM och SNABB. Ställ max 1-2 korta frågor, sedan kör.
-Om du kan gissa rimliga svar på saknade detaljer — gör det och berätta vad du antog.
-
-Samla MINST detta innan du avslutar:
-- Vad ska byggas (redan känt från användarens meddelande)
-- Vem använder det (gissa om oklart)
-- Acceptanskriterier — 2-4 konkreta punkter
-- Fas: MVP / v1 / v2 (fråga EN gång om oklart, annars MVP)
-
-Jobba som en senior utvecklare: förstå intentionen, fyll i rimliga gap, kör.
+Gör detta omedelbart utan att fråga:
+- Tolka vad som ska byggas (fyll i gaps)
+- Antag: vem använder det, vilken fas (MVP om oklart)
+- Skapa 2-4 konkreta acceptanskriterier
+- Lägg till feature direkt
 
 När klart, avsluta MED EXAKT:
 [FEATURE_KLAR]
@@ -931,14 +973,30 @@ Du har FULL FRIHET att:
 - Specificera features baserat på vad du vet om projektet
 Du BEHÖVER INTE fråga om saker du kan rimligt anta. Kör på.
 
+KRITISK REGEL — DU HAR FULL TILLGÅNG:
+Du får automatiskt hela kodbasen, git-historik, backlog och terminalutdata VARJE gång.
+FRÅGA ALDRIG användaren om saker du kan se i kontexten nedan.
+Om du ser ett fel i koden — berätta vad det är och hur det fixas.
+Om du ser git-status — använd den informationen direkt.
+Du KAN INTE bygga kod (det är Snickarens jobb) men du KAN läsa, analysera och ge exakta instruktioner.
+
 PROJEKTMINNE:
 {memory}
 
 FASÖVERSIKT:
-{phases}"""
+{phases}
+
+LIVE-KONTEXT (uppdateras automatiskt):
+{live_context}"""
 
 # Cache för agentfynd — används av Besiktningsmannen post-build
 _review_cache: dict = {}
+
+# ── Loop-guard: förhindrar dubbla anrop och pipeline-loopar ──────────────────
+_pipeline_running: dict = {}   # {feature_name: start_timestamp}
+_pipeline_attempts: dict = {}  # {feature_name: antal_försök}
+MAX_PIPELINE_ATTEMPTS = 3      # Max antal gånger samma feature får köra
+PIPELINE_TIMEOUT_S = 300       # 5 min timeout per körning
 
 # ─── Domare — aktiveras efter max_iter misslyckanden ─────────────────────────
 
@@ -1422,12 +1480,14 @@ async def chat(payload: dict):
     client_inst = get_client(s)
     if not client_inst: return JSONResponse({"reply":"⚠️ API-nyckel saknas. Gå till Inställningar (⚙️) och lägg till din Anthropic API-nyckel.","feature_detected":None,"feature_spec":None})
     memory=load_memory(proj["id"]); phases=phases_summary(proj["id"])
-    # Ge Projektledaren tillgång till aktuell kodbas
+    # Ge Projektledaren full kontext — kodbas + git + backlog
     rd_chat = effective_repo_dir(proj["id"])
     code_ctx_chat = read_codebase_context(rd_chat, {"name": message, "problem": message, "solution": ""}) if rd_chat.exists() else ""
-    code_section = f"\n\nAKTUELL KODBAS:\n{code_ctx_chat}" if code_ctx_chat else ""
+    live_ctx = _gather_live_context(proj)
+    if code_ctx_chat:
+        live_ctx += f"\n\nKODBAS (relevanta delar):\n{code_ctx_chat[:8000]}"
     system=PROJEKTLEDARE_PROMPT.format(project_name=proj["name"],project_desc=proj.get("description",""),
-        project_github=proj.get("github","Ej angivet"),memory=memory,phases=phases) + code_section
+        project_github=proj.get("github","Ej angivet"),memory=memory,phases=phases,live_context=live_ctx)
     response=client_inst.messages.create(model=model_for("projektledare",s),max_tokens=1500,system=system,
         messages=history[-12:]+[{"role":"user","content":message}])
     reply=response.content[0].text
@@ -1447,12 +1507,36 @@ async def chat(payload: dict):
 # Review — EN enda pass. Om något agent säger ifrån → Domaren direkt.
 @app.post("/api/review")
 async def review_feature(payload: dict):
+    import time as _time
     feature_name = payload.get("feature_name", "Okand")
     spec_obj = payload.get("spec_obj", {})
     proj = get_active_project()
     if not proj:
         return JSONResponse({"approved": False, "error": "Inget aktivt projekt"}, status_code=400)
     s = load_settings()
+    max_iterations = s.get("max_iterations", 3)
+
+    # ── Loop-guard: blockera dubbelanrop ──────────────────────────────────────
+    now = _time.time()
+    running_since = _pipeline_running.get(feature_name)
+    if running_since and (now - running_since) < PIPELINE_TIMEOUT_S:
+        elapsed = int(now - running_since)
+        await manager.broadcast({"type": "loop_blocked",
+            "feature": feature_name, "elapsed": elapsed})
+        return JSONResponse({"approved": False,
+            "error": f"Pipeline för '{feature_name}' körs redan ({elapsed}s). Vänta tills den är klar."})
+
+    # ── Försöksräknare: stoppa om för många iterationer ───────────────────────
+    attempts = _pipeline_attempts.get(feature_name, 0) + 1
+    _pipeline_attempts[feature_name] = attempts
+    _pipeline_running[feature_name] = now
+
+    if attempts > MAX_PIPELINE_ATTEMPTS:
+        _pipeline_running.pop(feature_name, None)
+        await manager.broadcast({"type": "loop_max_reached",
+            "feature": feature_name, "attempts": attempts})
+        return JSONResponse({"approved": False,
+            "error": f"'{feature_name}' har försökts {attempts} gånger. Granska manuellt."})
     if not s.get("api_key"):
         await manager.broadcast({"type": "pipeline_done", "success": False, "feature": feature_name,
             "reason": "⚠️ Anthropic API-nyckel saknas — gå till ⚙️ Inställningar och lägg in nyckeln."})
@@ -1511,14 +1595,11 @@ async def review_feature(payload: dict):
     await manager.broadcast({"type":"phase_done","phase":1,"name":"Arkitektritning",
         "plan":arkitekt_plan,"fragor":ark_fragor})
 
-    # Om arkitekten behöver svar → pausa och fråga användaren
-    if ark_fragor and ark_status not in ("GODKAND","GODKÄND"):
-        fragor_text = "\n".join(f"- {q}" for q in ark_fragor)
-        await manager.broadcast({"type":"pipeline_done","success":False,
-            "feature":feature_name,
-            "reason":f"📐 Chefarkitekten behöver svar innan planen kan färdigställas:\n\n{fragor_text}",
-            "arkitekt_fragor":ark_fragor})
-        return JSONResponse({"approved":False,"arkitekt_fragor":ark_fragor})
+    # Arkitektens frågor visas som info — de blockerar INTE längre
+    if ark_fragor:
+        fragor_text = "\n".join(f"• {q}" for q in ark_fragor)
+        await manager.broadcast({"type":"ark_fragor","feature":feature_name,"fragor":ark_fragor,
+            "message":f"📐 Arkitekttips (bygget fortsätter):\n{fragor_text}"})
 
     # Utöka spec med arkitektplan för fas 2
     enriched_spec = f"{spec_str}\n\n## ARKITEKTRITNING:\n{arkitekt_plan}"
@@ -1572,17 +1653,11 @@ async def review_feature(payload: dict):
         "arkitekt_plan": arkitekt_plan, "radgivande_recs": radgivande_recs,
     }
 
-    # Framgångsvillkor: inga HIGH-avvisningar från blockerande agenter
-    blockerande_failed = [
-        r for r in results
-        if r.get("id") in BLOCKERANDE_IDS
-        and r.get("status") not in ("GODKAND","GODKÄND")
-        and r.get("severity","LOW") == "HIGH"
-    ]
+    # Alla agents är nu rådgivande — aldrig blockerande
     snickare_instruktioner = arkitekt_plan
 
-    # ── Steg 3: Godkänt → klart att bygga ────────────────────────────────────
-    if not blockerande_failed:
+    # ── Steg 3: Alltid godkänt → klart att bygga (agents = konsulter) ─────────
+    if True:
         features = load_features(proj["id"])
         for f in features:
             if f["name"] == feature_name:
@@ -1654,6 +1729,8 @@ async def review_feature(payload: dict):
 
         save_features(proj["id"], features)
         update_features_md(proj["id"])
+        _pipeline_running.pop(feature_name, None)
+        _pipeline_attempts.pop(feature_name, None)  # Nollställ räknaren vid godkänt
         await manager.broadcast({"type": "pipeline_done", "success": True,
             "feature": feature_name, "snickare_instruktioner": snickare_instruktioner,
             "backlog_added": backlog_added})
@@ -1713,6 +1790,7 @@ async def review_feature(payload: dict):
     if nasta_steg:
         pl_message += f"\n**➡ Nästa steg:** {nasta_steg}"
 
+    _pipeline_running.pop(feature_name, None)
     await manager.broadcast({"type": "pipeline_done", "success": False,
         "feature": feature_name,
         "domare_report": domare_result,
@@ -2352,28 +2430,157 @@ async def ollama_status():
     except:
         return JSONResponse({"running": False, "models": []})
 
-# ─── Spec-granskare ───────────────────────────────────────────────────────────
 
-SPEC_REVIEWER_PROMPT = """Du ar Spec-granskaren i Ishoo Creator. Din enda uppgift:
-KONTROLLERA om en feature-spec ar tillrackligt tydlig for att byggas korrekt.
 
-GRANSKA dessa 5 punkter:
-1. Finns matbara acceptanskriterier? (t.ex. "Anvandaren kan..." INTE "Det ska fungera")
-2. Ar problemet specifikt? (vem, nar, hur ofta)
-3. Ar scope tydligt? (vad ingar INTE i denna feature?)
-4. Finns viktiga edge cases beskrivna? (vad hander om X saknas, Y ar tomt, Z ar fel)
-5. Ar beroenden till andra features tydliga?
+# ─── Konsultation — agenter som rena konsulter (aldrig blockerande) ───────────
+
+KONSULT_SYNTES_PROMPT = """Du är Projektledaren. Agenternas konsultationsresultat är klara.
+Sammanfatta i tre delar — var kortfattad och konkret:
+
+1. PLAN: Vad bör Snickaren göra? (max 5 meningar)
+2. PRIORITET: Lista max 3 saker i prioritetsordning med motivering
+3. RISKER: Max 2 risker att ha koll på (eller "Inga" om inga finns)
 
 Returnera ENBART JSON:
 {
-  "status": "GODKAND" eller "OTYDLIG",
-  "redo_att_bygga": true eller false,
-  "fragor": ["Specifik fraga som maste besvaras fore bygget"],
-  "forslag": "Forbattrade acceptanskriterier om du kan formulera dem"
-}
+  "plan": "Vad som ska byggas och hur",
+  "prioritet": [{"nr":1,"uppgift":"...","motivering":"..."}],
+  "risker": ["..."],
+  "redo_att_bygga": true
+}"""
 
-GODKAND = kan byggas direkt utan missforstand
-OTYDLIG = risk att Snickaren bygger fel sak"""
+
+@app.post("/api/consult")
+async def consult_feature(payload: dict):
+    """Kör alla agenter som konsulter — aldrig blockerande. Returnerar prioriterad plan."""
+    feature_name = payload.get("feature_name", "Okänd")
+    spec_obj = payload.get("spec_obj", {})
+    proj = get_active_project()
+    if not proj:
+        return JSONResponse({"error": "Inget aktivt projekt"}, status_code=400)
+    s = load_settings()
+    client_inst = get_client(s)
+    if not client_inst:
+        return JSONResponse({"error": "API-nyckel saknas"}, status_code=400)
+
+    spec_str = json.dumps(spec_obj, ensure_ascii=False) if spec_obj else feature_name
+    memory = load_memory(proj["id"])
+    agents, _ = get_agents_from_settings(s)
+    rd = effective_repo_dir(proj["id"])
+    code_ctx = read_codebase_context(rd, spec_obj, for_ollama=False) if rd.exists() else ""
+    loop = asyncio.get_event_loop()
+
+    await manager.broadcast({"type": "consult_start", "feature": feature_name,
+        "agents": [{"id": a["id"], "name": f"{a.get('emoji','')}{a['name']}"} for a in agents]})
+
+    # Kör alla agenter parallellt — inga blockerare
+    results = []
+    ex = ThreadPoolExecutor(max_workers=min(len(agents), 10))
+    future_to_agent = {ex.submit(run_agent, ag, spec_str, memory, "", s, code_ctx): ag
+                       for ag in agents}
+    try:
+        from concurrent.futures import as_completed as _as_completed
+        pending = set(future_to_agent.keys())
+        while pending:
+            done = await loop.run_in_executor(None,
+                lambda fs=list(pending): next(_as_completed(fs)))
+            pending.discard(done)
+            ag = future_to_agent[done]
+            try:
+                result = done.result()
+            except Exception as e:
+                result = {"id": ag["id"], "agent": ag["name"], "status": "GODKAND",
+                          "findings": [f"Agent-fel: {e}"], "severity": "LOW", "suggestions": []}
+            results.append(result)
+            await manager.broadcast({"type": "consult_agent_done",
+                "id": result.get("id"), "name": result.get("agent", "Agent"),
+                "findings": result.get("findings", [])[:3],
+                "severity": result.get("severity", "LOW"),
+                "suggestions": result.get("suggestions", [])[:2]})
+    finally:
+        ex.shutdown(wait=False)
+
+    # Syntetisera med Projektledaren
+    findings_text = ""
+    for r in results:
+        finds = "; ".join(r.get("findings", [])[:3]) or "OK"
+        sugg = "; ".join(r.get("suggestions", [])[:2]) or ""
+        findings_text += f"- {r.get('agent','?')} [{r.get('severity','LOW')}]: {finds}"
+        if sugg:
+            findings_text += f" | Förslag: {sugg}"
+        findings_text += "\n"
+
+    syntes_input = (
+        f"FEATURE: {feature_name}\n"
+        f"SPEC: {spec_str[:800]}\n\n"
+        f"AGENTERNAS FYND:\n{findings_text}"
+    )
+    try:
+        syntes_resp = client_inst.messages.create(
+            model=model_for("haiku", s), max_tokens=800,
+            system=KONSULT_SYNTES_PROMPT,
+            messages=[{"role": "user", "content": syntes_input}])
+        text = syntes_resp.content[0].text.strip()
+        si, ei = text.find("{"), text.rfind("}") + 1
+        plan_data = json.loads(text[si:ei]) if si != -1 else {
+            "plan": "Bygga featuren enligt spec.",
+            "prioritet": [{"nr": 1, "uppgift": feature_name, "motivering": "Enligt spec"}],
+            "risker": [],
+            "redo_att_bygga": True
+        }
+    except Exception as ex_e:
+        plan_data = {
+            "plan": "Bygga featuren enligt spec.",
+            "prioritet": [{"nr": 1, "uppgift": feature_name, "motivering": "Enligt spec"}],
+            "risker": [],
+            "redo_att_bygga": True
+        }
+
+    # Auto-skapa backlog-poster för HIGH-fynd
+    backlog_added = []
+    if spec_obj:
+        features = load_features(proj["id"])
+        existing = {f["name"] for f in features}
+        for r in results:
+            if r.get("severity") == "HIGH" and r.get("findings"):
+                for finding in r.get("findings", [])[:1]:
+                    if len(finding) > 20:
+                        task_name = f"{feature_name}: [{r.get('agent','?')}] {finding[:60]}"
+                        if task_name not in existing:
+                            features.append({
+                                "id": len(features) + 1,
+                                "name": task_name,
+                                "phase": "Backlog",
+                                "status": "Planerad",
+                                "spec": {"name": task_name, "description": finding,
+                                         "källa": r.get("agent", "?")},
+                                "created": datetime.now().isoformat()
+                            })
+                            existing.add(task_name)
+                            backlog_added.append(task_name)
+        if backlog_added:
+            save_features(proj["id"], features)
+
+    await manager.broadcast({"type": "consult_done", "feature": feature_name,
+        "plan": plan_data, "backlog_added": backlog_added})
+
+    return JSONResponse({"plan": plan_data, "backlog_added": backlog_added, "results": results})
+
+# ─── Spec-granskare ───────────────────────────────────────────────────────────
+
+SPEC_REVIEWER_PROMPT = """Du ar Spec-granskaren i Ishoo Creator.
+Var EXTREMT generös. Kod-fixar, bugg-fixar och tekniska förbättringar ar alltid klara att bygga.
+
+OTYDLIG ENBART om: spec ar helt tom eller oläslig (0-5 ord utan mening).
+I alla andra fall: GODKAND.
+
+Returnera ENBART JSON:
+{
+  "status": "GODKAND",
+  "redo_att_bygga": true,
+  "fragor": [],
+  "forslag": ""
+}"""
 
 
 @app.post("/api/spec-review")
@@ -2864,6 +3071,39 @@ async def _run_code_iterator_bg(proj: dict, proj_path: Path, iterations: int, fo
         "findings": all_findings
     })
 
+
+
+@app.get("/api/arch/{pid}")
+async def get_arch_by_pid(pid: str):
+    arch = load_architecture(pid)
+    return JSONResponse({"content": arch} if arch else {"content": ""})
+
+@app.put("/api/arch/{pid}")
+async def save_arch_by_pid(pid: str, payload: dict):
+    content_text = payload.get("content", "")
+    save_architecture(pid, content_text)
+    return JSONResponse({"ok": True})
+
+@app.post("/api/arch/{pid}/generate")
+async def generate_arch_by_pid(pid: str):
+    proj = get_active_project()
+    if not proj: return JSONResponse({"error": "Inget aktivt projekt"}, status_code=400)
+    s = load_settings()
+    rd = effective_repo_dir(pid)
+    ctx = read_codebase_context(rd, {}) if rd.exists() else ""
+    client_inst = get_client(s)
+    if not client_inst: return JSONResponse({"content": "API-nyckel saknas."})
+    try:
+        r = client_inst.messages.create(
+            model=model_for("haiku", s), max_tokens=1200,
+            system="Du är en systemarkitekt. Skapa en kort arkitekturöversikt på svenska för projektet. Max 400 ord. Markdown-format.",
+            messages=[{"role": "user", "content": f"Projekt: {proj.get('name','')}\n\nKodbas:\n{ctx[:6000]}"}]
+        )
+        arch_text = r.content[0].text
+        save_architecture(pid, arch_text)
+        return JSONResponse({"content": arch_text})
+    except Exception as e:
+        return JSONResponse({"content": f"Fel: {e}"})
 
 @app.on_event("startup")
 async def start_file_watcher():

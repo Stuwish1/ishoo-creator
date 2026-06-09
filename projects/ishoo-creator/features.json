@@ -345,5 +345,99 @@
       "beroende_av": []
     },
     "created": "2026-06-09T11:44:02.923623"
+  },
+  {
+    "id": 30,
+    "name": "Rensa features.json",
+    "phase": "MVP",
+    "status": "Planerad",
+    "spec": {
+      "name": "Rensa features.json",
+      "phase": "MVP",
+      "problem": "features.json är 20kb kaos med duplicerade subtasks, blockerade features och sub-sub-subtasks som aldrig lösts",
+      "solution": "Töm features.json till en ren tom lista []",
+      "users": "Projektledaren / Ishoo Creator internt",
+      "acceptance_criteria": [
+        "features.json innehåller en tom array []",
+        "FEATURES.md uppdateras till att reflektera tomt tillstånd",
+        "Inga gamla blockerade eller duplicerade features finns kvar"
+      ],
+      "dependencies": [],
+      "risks": [
+        "Tidigare feature-historik försvinner permanent"
+      ]
+    },
+    "created": "2026-06-09T11:59:09.652536"
+  },
+  {
+    "id": 31,
+    "name": "Rensa features.json",
+    "phase": "MVP",
+    "status": "Planerad",
+    "spec": {
+      "name": "Rensa features.json",
+      "phase": "MVP",
+      "problem": "features.json är 20kb kaos med duplicerade subtasks, blockerade features och sub-sub-subtasks. Det försvårar all framtida planering.",
+      "solution": "Skriv features.json som en tom array []. Uppdatera FEATURES.md till rent tomt tillstånd.",
+      "users": "Projektledaren internt",
+      "acceptance_criteria": [
+        "features.json innehåller exakt []",
+        "FEATURES.md uppdateras och visar inga features i någon fas",
+        "Inga fel kastas i UI:t efter rensning"
+      ],
+      "dependencies": [],
+      "risks": [
+        "Feature-historik försvinner — accepterat"
+      ]
+    },
+    "created": "2026-06-09T12:00:00.315246"
+  },
+  {
+    "id": 32,
+    "name": "Städa app.py — kritiska kodfel",
+    "phase": "MVP",
+    "status": "Planerad",
+    "spec": {
+      "name": "Städa app.py — kritiska kodfel",
+      "phase": "MVP",
+      "problem": "Tre kända problem i app.py: (1) duplicerad @app.post endpoint 'git_push_direct' som kan krascha FastAPI, (2) oklart scope för max_iterations i review_feature, (3) rörig backlog med duplicerade och blockerade features som skapar förvirring",
+      "solution": "Snickaren läser app.py och: 1) Tar bort den duplicerade git_push_direct-definitionen, 2) Säkerställer att max_iterations = settings.get('max_iterations', 3) är definierad i review_feature-scope, 3) Rensar features.json från alla blockerade/duplicerade Clipboard Image Input-poster",
+      "users": "Ishoo Creator självt — systemstabilitet",
+      "acceptance_criteria": [
+        "git_push_direct definieras exakt EN gång i app.py",
+        "review_feature kraschar inte på NameError för max_iterations",
+        "features.json innehåller max 2-3 rena poster utan duplicerade subtasks",
+        "Server startar utan FastAPI-varningar om duplicerade routes"
+      ],
+      "dependencies": [],
+      "risks": [
+        "Om fel git_push_direct-definition tas bort kan push sluta fungera — Snickaren måste bevara den SENASTE/korrekta definitionen"
+      ]
+    },
+    "created": "2026-06-09T12:30:10.141331"
+  },
+  {
+    "id": 33,
+    "name": "Fixa: Starta granskning kraschar",
+    "phase": "MVP",
+    "status": "Planerad",
+    "spec": {
+      "name": "Fixa: Starta granskning kraschar",
+      "phase": "MVP",
+      "problem": "Knappen 'Starta granskning' failar. Troliga orsaker: (1) NameError på max_iterations i review_feature, (2) duplicerad git_push_direct gör att FastAPI kastar fel vid uppstart, (3) saknad felhantering i agent-pipeline",
+      "solution": "Snickaren ska: 1) Hitta review_feature (rad ~1517) och säkerställa att max_iterations = settings.get('max_iterations', 3) finns TIDIGT i funktionen, 2) Hitta och ta bort den ANDRA definitionen av git_push_direct (behåll den på rad ~2745, ta bort eventuell duplikat), 3) Wrappa hela agent-loopen i try/except så ett agent-fel inte dödar hela reviewen, 4) Logga exakt vilket fel som uppstår via broadcast till WebSocket",
+      "users": "Alla användare av Ishoo Creator",
+      "acceptance_criteria": [
+        "Klicka 'Starta granskning' — pipeline startar och agent_status-events syns i UI",
+        "Om en agent kraschar visas den som AVVISAD istället för att hela reviewen dör",
+        "Ingen NameError eller AttributeError i server-loggen vid /api/review",
+        "git_push_direct definieras exakt EN gång i app.py (ta bort duplikaten)"
+      ],
+      "dependencies": [],
+      "risks": [
+        "Snickaren måste bevara git_push_direct på rad ~2745 och ta bort eventuell duplikat på annan rad"
+      ]
+    },
+    "created": "2026-06-09T12:30:54.257057"
   }
 ]

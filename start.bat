@@ -14,7 +14,14 @@ echo  Ishoo Creator startar...
 echo  Stang INTE detta fonster.
 echo.
 
-:: Öppna webbläsaren efter 2 sekunder
+:: Dod gammal process pa port 8000 om den kors
+for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":8000 " ^| findstr "LISTENING"') do (
+    echo  Stanger gammal server (PID %%a)...
+    taskkill /PID %%a /F >nul 2>&1
+)
+timeout /t 1 >nul
+
+:: Oppna webbläsaren efter 2 sekunder
 start /b cmd /c "timeout /t 2 >nul && start http://localhost:8000"
 
 :: Starta servern (synligt fönster så vi ser fel)

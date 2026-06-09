@@ -1,1 +1,42 @@
-[]
+[
+  {
+    "id": 1,
+    "name": "Agent-fel recovery & retry-logik",
+    "phase": "MVP",
+    "description": "När en agent kraschar, implementera automatisk retry (max 2 gånger) med exponentiell backoff innan den markeras AVVISAD, så temporära nätverks- eller timeout-fel inte orsakar falska negativ i review.",
+    "from_suggestion": true,
+    "added": "2026-06-09T12:31:34.449098"
+  },
+  {
+    "id": 2,
+    "name": "Review-pipeline progress-tracking",
+    "phase": "MVP",
+    "description": "Lägg till en progress-bar i UI som visar vilken agent som kör nu, hur många har avslutats och beräknad tid kvar — så användaren ser att reviewen lever och inte är frusen.",
+    "from_suggestion": true,
+    "added": "2026-06-09T12:31:36.222622"
+  },
+  {
+    "id": 3,
+    "name": "Agent-output validation & schema-check",
+    "phase": "v1",
+    "description": "Innan en agent's output sparas, validera att den matchar förväntad JSON-schema (t.ex. feedback-fälten, score-range) — avvisa output som inte passar schemat istället för att låta korrupt data förstöra rapporten.",
+    "from_suggestion": true,
+    "added": "2026-06-09T12:31:37.242529"
+  },
+  {
+    "id": 4,
+    "name": "Review-session timeout & cancel-knapp",
+    "phase": "v1",
+    "description": "Sätt en total timeout (t.ex. 5 min) för hela review-pipeln och ge användaren en CANCEL-knapp som gracefully stänger agenter och returnerar partial results istället för att låta reviewen hänga för evigt.",
+    "from_suggestion": true,
+    "added": "2026-06-09T12:31:37.789725"
+  },
+  {
+    "id": 5,
+    "name": "Agent-performance dashboard & diagnostik",
+    "phase": "v1",
+    "description": "Admin-panel som loggar varje agent-körning (start/slut-tid, tokens använt, output-storlek, exit-kod) så man kan identifiera vilken agent som är instabil och behöver debug eller konfiguration-justering.",
+    "from_suggestion": true,
+    "added": "2026-06-09T12:31:38.326374"
+  }
+]
