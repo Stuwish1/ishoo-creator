@@ -468,5 +468,325 @@
       "källa": "Ansvarsfördelning"
     },
     "created": "2026-06-09T13:37:31.622003"
+  },
+  {
+    "id": 33,
+    "name": "Syntax-guard för Python-filer i apply_and_push",
+    "phase": "MVP",
+    "status": "Planerad",
+    "spec": {
+      "name": "Syntax-guard för Python-filer i apply_and_push",
+      "phase": "MVP",
+      "problem": "Python-filer med syntaxfel pushas till git utan validering, vilket kraschar appen vid nästa start",
+      "solution": "Lägg till ast.parse()-validering i apply_and_push() för varje .py-fil i file_changes. Avbryt push och skicka WS-event syntax_error om fel hittas. Frontend visar tydligt felmeddelande.",
+      "users": "Utvecklare som använder Ishoo Creator för att bygga appar",
+      "acceptance_criteria": [
+        "apply_and_push() kör ast.parse() på varje .py-fil innan git commit",
+        "Om syntaxfel: push avbryts, WS-event syntax_error skickas med filnamn + felmeddelande",
+        "Frontend visar ❌ Syntaxfel i {fil}: {fel} via addMsg",
+        "Giltiga .py-filer pushas normalt utan störning"
+      ],
+      "dependencies": [
+        "apply_and_push i app.py rad 843"
+      ],
+      "risks": [
+        "app.py är 161KB — Snickaren måste använda Python direct write"
+      ]
+    },
+    "created": "2026-06-09T13:54:35.526459"
+  },
+  {
+    "id": 34,
+    "name": "Syntax-guard för Python-filer i apply_and_push: [Tillgänglighetsgranskaren] KRITISK: Ikoner utan aria-label (t.ex. emoji-knappar i sideb",
+    "phase": "Backlog",
+    "status": "Planerad",
+    "spec": {
+      "name": "Syntax-guard för Python-filer i apply_and_push: [Tillgänglighetsgranskaren] KRITISK: Ikoner utan aria-label (t.ex. emoji-knappar i sideb",
+      "description": "KRITISK: Ikoner utan aria-label (t.ex. emoji-knappar i sidebar, ⚙️ Inställningar, ♿ Tillgänglighet, osv.) — skärmläsare läser bara emojin, inte funktionens syfte",
+      "källa": "Tillgänglighetsgranskaren"
+    },
+    "created": "2026-06-09T13:55:17.804937"
+  },
+  {
+    "id": 35,
+    "name": "Syntax-guard för Python-filer i apply_and_push: [Arkitekt] syntax_guard.py existerar som separat modul men importeras v",
+    "phase": "Backlog",
+    "status": "Planerad",
+    "spec": {
+      "name": "Syntax-guard för Python-filer i apply_and_push: [Arkitekt] syntax_guard.py existerar som separat modul men importeras v",
+      "description": "syntax_guard.py existerar som separat modul men importeras via patch_apply_and_push.py som i sin tur importeras av app.py vid startup — tre lager av indirektion för en enkel valideringsfunktion som borde vara direkt i app.py eller inlinead i apply_and_push",
+      "källa": "Arkitekt"
+    },
+    "created": "2026-06-09T13:55:17.804962"
+  },
+  {
+    "id": 36,
+    "name": "Syntax-guard för Python-filer i apply_and_push: [UX-granskare] Kritisk: UX-flödet saknar tydlig feedback när syntax-valider",
+    "phase": "Backlog",
+    "status": "Planerad",
+    "spec": {
+      "name": "Syntax-guard för Python-filer i apply_and_push: [UX-granskare] Kritisk: UX-flödet saknar tydlig feedback när syntax-valider",
+      "description": "Kritisk: UX-flödet saknar tydlig feedback när syntax-validering misslyckas — användaren vet inte varför push stoppades",
+      "källa": "UX-granskare"
+    },
+    "created": "2026-06-09T13:55:17.804965"
+  },
+  {
+    "id": 37,
+    "name": "Syntax-guard för Python-filer i apply_and_push: [Säkerhetsansvarig] settings.json innehåller API-nycklar (api_key: sk-ant-...) o",
+    "phase": "Backlog",
+    "status": "Planerad",
+    "spec": {
+      "name": "Syntax-guard för Python-filer i apply_and_push: [Säkerhetsansvarig] settings.json innehåller API-nycklar (api_key: sk-ant-...) o",
+      "description": "settings.json innehåller API-nycklar (api_key: sk-ant-...) och GitHub-token (github_token: ghp_...) i klartext på disk — om filen läses av obehörig exponeras båda credentials",
+      "källa": "Säkerhetsansvarig"
+    },
+    "created": "2026-06-09T13:55:17.804968"
+  },
+  {
+    "id": 38,
+    "name": "Syntax-guard för Python-filer i apply_and_push: [Mobil/Fält] Touchmål under 44px: Buttons i sidebaren ('panel-tab', 'sb-t",
+    "phase": "Backlog",
+    "status": "Planerad",
+    "spec": {
+      "name": "Syntax-guard för Python-filer i apply_and_push: [Mobil/Fält] Touchmål under 44px: Buttons i sidebaren ('panel-tab', 'sb-t",
+      "description": "Touchmål under 44px: Buttons i sidebaren ('panel-tab', 'sb-tab') har ingen explicit minsta höjd definierad, kan vara under 44px på mobil",
+      "källa": "Mobil/Fält"
+    },
+    "created": "2026-06-09T13:55:17.804972"
+  },
+  {
+    "id": 39,
+    "name": "Syntax-guard för Python-filer i apply_and_push: [Ansvarsfördelning] app.py är en 'God Object' (~3453 rader) som hanterar: instäl",
+    "phase": "Backlog",
+    "status": "Planerad",
+    "spec": {
+      "name": "Syntax-guard för Python-filer i apply_and_push: [Ansvarsfördelning] app.py är en 'God Object' (~3453 rader) som hanterar: instäl",
+      "description": "app.py är en 'God Object' (~3453 rader) som hanterar: inställningar, projekthantering, git-operationer, AI-agenter, WebSocket, API-endpoints, build-verifiering, dev-server, versionshistorik och arkitekturkartor — minst 10 distinkta ansvarsområden i en enda fil",
+      "källa": "Ansvarsfördelning"
+    },
+    "created": "2026-06-09T13:55:17.804976"
+  },
+  {
+    "id": 40,
+    "name": "Syntax-guard för Python-filer i apply_and_push",
+    "phase": "MVP",
+    "status": "Planerad",
+    "spec": {
+      "name": "Syntax-guard för Python-filer i apply_and_push",
+      "phase": "MVP",
+      "problem": "apply_and_push är duplicerad (rad 702 + 876), syntax-guard är implementerad via monkey-patching som bryter arkitekturen, besiktningsmannen avvisade bygget",
+      "solution": "Ta bort duplikat, integrera validate_file_changes() direkt i den enda apply_and_push-funktionen, lägg till syntax_error WS-event, hantera i frontend, rensa bort patch-filer",
+      "users": "Snickaren / pipeline-systemet",
+      "acceptance_criteria": [
+        "Exakt EN apply_and_push-funktion i app.py",
+        "validate_file_changes() anropas innan git commit — avbryter vid syntaxfel",
+        "WS-event syntax_error skickas med filnamn + rad + meddelande vid fel",
+        "index.html handleWS() visar röd error-box vid syntax_error",
+        "patch_apply_and_push.py och startup_patch.py är borttagna från projektet"
+      ],
+      "dependencies": [
+        "syntax_guard.py"
+      ],
+      "risks": [
+        "app.py är 163KB — måste använda Python direct write, ALDRIG Edit-verktyg"
+      ]
+    },
+    "created": "2026-06-09T14:50:28.048410"
+  },
+  {
+    "id": 41,
+    "name": "Syntax-guard för Python-filer i apply_and_push: [Tillgänglighetsgranskaren] Saknade aria-label på interaktiva element (knappar, ikoner) ",
+    "phase": "Backlog",
+    "status": "Planerad",
+    "spec": {
+      "name": "Syntax-guard för Python-filer i apply_and_push: [Tillgänglighetsgranskaren] Saknade aria-label på interaktiva element (knappar, ikoner) ",
+      "description": "Saknade aria-label på interaktiva element (knappar, ikoner) i index.html",
+      "källa": "Tillgänglighetsgranskaren"
+    },
+    "created": "2026-06-09T14:51:17.511572"
+  },
+  {
+    "id": 42,
+    "name": "Syntax-guard för Python-filer i apply_and_push: [UX-granskare] Oklar användarflöde för syntaxfelhantering — när uppdagas sy",
+    "phase": "Backlog",
+    "status": "Planerad",
+    "spec": {
+      "name": "Syntax-guard för Python-filer i apply_and_push: [UX-granskare] Oklar användarflöde för syntaxfelhantering — när uppdagas sy",
+      "description": "Oklar användarflöde för syntaxfelhantering — när uppdagas syntax_error WS-event? Visas det innan eller efter commit?",
+      "källa": "UX-granskare"
+    },
+    "created": "2026-06-09T14:51:17.511584"
+  },
+  {
+    "id": 43,
+    "name": "Syntax-guard för Python-filer i apply_and_push: [Arkitekt] Duplicerad apply_and_push-funktion: definierad på rad 702 OC",
+    "phase": "Backlog",
+    "status": "Planerad",
+    "spec": {
+      "name": "Syntax-guard för Python-filer i apply_and_push: [Arkitekt] Duplicerad apply_and_push-funktion: definierad på rad 702 OC",
+      "description": "Duplicerad apply_and_push-funktion: definierad på rad 702 OCH rad 876 i app.py — bryter mot Single Responsibility och skapar oförutsägbart beteende beroende på vilken som anropas",
+      "källa": "Arkitekt"
+    },
+    "created": "2026-06-09T14:51:17.511588"
+  },
+  {
+    "id": 44,
+    "name": "Syntax-guard för Python-filer i apply_and_push: [Ansvarsfördelning] apply_and_push har DUBBELT ansvar: skriver filer till disk O",
+    "phase": "Backlog",
+    "status": "Planerad",
+    "spec": {
+      "name": "Syntax-guard för Python-filer i apply_and_push: [Ansvarsfördelning] apply_and_push har DUBBELT ansvar: skriver filer till disk O",
+      "description": "apply_and_push har DUBBELT ansvar: skriver filer till disk OCH utför git commit/push — dessa är separata operationer som bör hanteras av olika funktioner",
+      "källa": "Ansvarsfördelning"
+    },
+    "created": "2026-06-09T14:51:17.511591"
+  },
+  {
+    "id": 45,
+    "name": "Syntax-guard för Python-filer i apply_and_push: [Strukturnavigatorn] KRITISKT: Två definitioner av apply_and_push i app.py — rad ",
+    "phase": "Backlog",
+    "status": "Planerad",
+    "spec": {
+      "name": "Syntax-guard för Python-filer i apply_and_push: [Strukturnavigatorn] KRITISKT: Två definitioner av apply_and_push i app.py — rad ",
+      "description": "KRITISKT: Två definitioner av apply_and_push i app.py — rad 702 och rad 876. INDEX bekräftar båda positionerna.",
+      "källa": "Strukturnavigatorn"
+    },
+    "created": "2026-06-09T14:51:17.511594"
+  },
+  {
+    "id": 46,
+    "name": "Syntax-guard för Python-filer i apply_and_push: [Mobil/Fält] Touchmål för mobil under 44px: Knapparna i chat-interface (s",
+    "phase": "Backlog",
+    "status": "Planerad",
+    "spec": {
+      "name": "Syntax-guard för Python-filer i apply_and_push: [Mobil/Fält] Touchmål för mobil under 44px: Knapparna i chat-interface (s",
+      "description": "Touchmål för mobil under 44px: Knapparna i chat-interface (send-knapp), modaler och navigation-tabs är för små för handskeklädda tummar",
+      "källa": "Mobil/Fält"
+    },
+    "created": "2026-06-09T14:51:17.511596"
+  },
+  {
+    "id": 47,
+    "name": "Syntax-guard för Python-filer i apply_and_push: [Beroendeanalytikorn] DUPLIKAT: apply_and_push är definierad TVÅ gånger i app.py —",
+    "phase": "Backlog",
+    "status": "Planerad",
+    "spec": {
+      "name": "Syntax-guard för Python-filer i apply_and_push: [Beroendeanalytikorn] DUPLIKAT: apply_and_push är definierad TVÅ gånger i app.py —",
+      "description": "DUPLIKAT: apply_and_push är definierad TVÅ gånger i app.py — på rad 702 och rad 876. Detta bryter Python-semantiken (andra definitionen överskriver den första) och gör koden oförutsägbar.",
+      "källa": "Beroendeanalytikorn"
+    },
+    "created": "2026-06-09T14:51:17.511600"
+  },
+  {
+    "id": 48,
+    "name": "Syntax-guard för Python-filer i apply_and_push: [Backend Kodaren] DUPLIKAT: apply_and_push definieras på RAD 702 OCH RAD 876 i",
+    "phase": "Backlog",
+    "status": "Planerad",
+    "spec": {
+      "name": "Syntax-guard för Python-filer i apply_and_push: [Backend Kodaren] DUPLIKAT: apply_and_push definieras på RAD 702 OCH RAD 876 i",
+      "description": "DUPLIKAT: apply_and_push definieras på RAD 702 OCH RAD 876 i app.py — kritiskt fel",
+      "källa": "Backend Kodaren"
+    },
+    "created": "2026-06-09T14:51:17.511602"
+  },
+  {
+    "id": 49,
+    "name": "Syntax-guard ombyggnad — ta bort duplikat apply_and_push",
+    "phase": "MVP",
+    "status": "Planerad",
+    "spec": {
+      "name": "Syntax-guard ombyggnad — ta bort duplikat apply_and_push",
+      "phase": "MVP",
+      "problem": "apply_and_push definieras på RAD 702 och RAD 876 i app.py. Python kör alltid den SISTA definitionen, vilket gör rad 702-versionen oförutsägbar. Monkey-patching via startup_patch.py och patch_apply_and_push.py förvärrar problemet.",
+      "solution": "1) Python direct write: ta bort rad 702–875 (första definitionen). 2) Integrera validate_file_changes() från syntax_guard.py direkt i rad 876-versionen. 3) Radera patch_apply_and_push.py och startup_patch.py. 4) Importera syntax_guard direkt överst i app.py.",
+      "users": "Snickaren / alla som pushar kod via Ishoo Creator",
+      "acceptance_criteria": [
+        "grep 'def apply_and_push' app.py returnerar EXAKT EN träff",
+        "validate_file_changes() anropas inuti apply_and_push INNAN git commit",
+        "patch_apply_and_push.py och startup_patch.py är borttagna",
+        "Python-syntax OK: python -m py_compile app.py returnerar 0"
+      ],
+      "dependencies": [
+        "syntax_guard.py"
+      ],
+      "risks": [
+        "app.py är 164KB — MÅSTE använda Python direct write, ALDRIG Edit-verktyget",
+        "startup_patch.py importeras möjligen i start.bat — kontrollera och ta bort referensen"
+      ]
+    },
+    "created": "2026-06-09T14:59:55.658336"
+  },
+  {
+    "id": 50,
+    "name": "Syntax-guard ombyggnad — ta bort duplikat apply_and_push: [Tillgänglighetsgranskaren] Kritiskt: Två definitioner av apply_and_push på rad 702 och ",
+    "phase": "Backlog",
+    "status": "Planerad",
+    "spec": {
+      "name": "Syntax-guard ombyggnad — ta bort duplikat apply_and_push: [Tillgänglighetsgranskaren] Kritiskt: Två definitioner av apply_and_push på rad 702 och ",
+      "description": "Kritiskt: Två definitioner av apply_and_push på rad 702 och rad 890 i app.py — Python använder endast den sista, vilket skapar odefinierat beteende",
+      "källa": "Tillgänglighetsgranskaren"
+    },
+    "created": "2026-06-09T15:00:55.790676"
+  },
+  {
+    "id": 51,
+    "name": "Syntax-guard ombyggnad — ta bort duplikat apply_and_push: [Säkerhetsansvarig] settings.json innehåller api_key (sk-ant-...) och github_tok",
+    "phase": "Backlog",
+    "status": "Planerad",
+    "spec": {
+      "name": "Syntax-guard ombyggnad — ta bort duplikat apply_and_push: [Säkerhetsansvarig] settings.json innehåller api_key (sk-ant-...) och github_tok",
+      "description": "settings.json innehåller api_key (sk-ant-...) och github_token (ghp_...) i klartext på disk — om filen råkar committas exponeras båda nycklarna",
+      "källa": "Säkerhetsansvarig"
+    },
+    "created": "2026-06-09T15:00:55.790687"
+  },
+  {
+    "id": 52,
+    "name": "Syntax-guard ombyggnad — ta bort duplikat apply_and_push: [Arkitekt] KRITISKT: Dubbel definition av apply_and_push i app.py — rad",
+    "phase": "Backlog",
+    "status": "Planerad",
+    "spec": {
+      "name": "Syntax-guard ombyggnad — ta bort duplikat apply_and_push: [Arkitekt] KRITISKT: Dubbel definition av apply_and_push i app.py — rad",
+      "description": "KRITISKT: Dubbel definition av apply_and_push i app.py — rad 702 och rad 890. Python kör alltid den sista definitionen, vilket gör rad 702-versionen dead code och skapar oförutsägbart beteende.",
+      "källa": "Arkitekt"
+    },
+    "created": "2026-06-09T15:00:55.790691"
+  },
+  {
+    "id": 53,
+    "name": "Syntax-guard ombyggnad — ta bort duplikat apply_and_push: [Mobil/Fält] Touchmål under 44px: Många knappar i action-bar (Verifiera/P",
+    "phase": "Backlog",
+    "status": "Planerad",
+    "spec": {
+      "name": "Syntax-guard ombyggnad — ta bort duplikat apply_and_push: [Mobil/Fält] Touchmål under 44px: Många knappar i action-bar (Verifiera/P",
+      "description": "Touchmål under 44px: Många knappar i action-bar (Verifiera/Pusha/Avbryt) sannolikt under 44x44px",
+      "källa": "Mobil/Fält"
+    },
+    "created": "2026-06-09T15:00:55.790693"
+  },
+  {
+    "id": 54,
+    "name": "Syntax-guard ombyggnad — ta bort duplikat apply_and_push: [Ansvarsfördelning] app.py är en 'God Object' på 3508 rader som hanterar: settin",
+    "phase": "Backlog",
+    "status": "Planerad",
+    "spec": {
+      "name": "Syntax-guard ombyggnad — ta bort duplikat apply_and_push: [Ansvarsfördelning] app.py är en 'God Object' på 3508 rader som hanterar: settin",
+      "description": "app.py är en 'God Object' på 3508 rader som hanterar: settings, projekthantering, git-operationer, AI-agenter, WebSocket, 40+ API-endpoints, build-verifiering, dev-server, versionshistorik, spec-granskning, arkitekturkarta, feature-queue — allt i en enda fil",
+      "källa": "Ansvarsfördelning"
+    },
+    "created": "2026-06-09T15:00:55.790696"
+  },
+  {
+    "id": 55,
+    "name": "Syntax-guard ombyggnad — ta bort duplikat apply_and_push: [UX-granskare] Oklart användareflöde: Systemet har ingen tydlig visuell ind",
+    "phase": "Backlog",
+    "status": "Planerad",
+    "spec": {
+      "name": "Syntax-guard ombyggnad — ta bort duplikat apply_and_push: [UX-granskare] Oklart användareflöde: Systemet har ingen tydlig visuell ind",
+      "description": "Oklart användareflöde: Systemet har ingen tydlig visuell indikation för vilken fas användaren är i (Spec-granskning → Agentkörning → Kodbygge → Verifiering → Push). Fliken 'Dev' existerar men är inte integrerad i det primära flödet.",
+      "källa": "UX-granskare"
+    },
+    "created": "2026-06-09T15:00:55.790698"
   }
 ]

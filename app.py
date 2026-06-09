@@ -680,30 +680,54 @@ def generate_diff_text(old_content: str, new_content: str, filename: str) -> lis
     return lines
 
 SNICKARE_PROMPT = """Du är Snickaren — expert på att bygga kod och modifiera filer.
-Du får en feature-spec och befintlig kodbas.
+Du får en feature-spec, arkitektplan och relevanta kodsektioner.
 
-REGLER:
+GRUNDREGLER:
 - Skriv komplett, körbar kod — inga TODO-kommentarer
-- Modifiera minsta möjliga antal filer
-- För Python/FastAPI-projekt: skriv Python. För React/TypeScript: skriv TypeScript. Matcha projektet.
-- Returnera EXAKT detta XML-format — inget annat:
+- Modifiera DIREKT i rätt fil — skapa ALDRIG patch-filer, helper-skript eller install-skript
+- Skapa ALDRIG filer som heter patch_*.py, install_*.py, startup_*.py eller *_patch.py
+- För Python/FastAPI-projekt: skriv Python direkt i app.py. För HTML/JS: skriv direkt i index.html
+- Om du ska lägga till en funktion i app.py: returnera app.py med funktionen inlagd på rätt ställe
 
-<response>
-<summary>Kort beskrivning av vad som gjordes</summary>
+NÄR DU ÄNDRAR EN STOR FIL (app.py, index.html):
+Du får INDEX + relevanta sektioner — INTE hela filen.
+Returnera BARA de ändrade funktionerna/sektionerna med tydliga markeringar:
+
 <file>
-  <path>relativ/sökväg/till/fil.py</path>
-  <action>create</action>
+  <path>app.py</path>
+  <action>patch</action>
+  <description>Vad som ändrades</description>
+  <content>
+# PATCH: Ersätt funktionen apply_and_push med denna version
+def apply_and_push(...):
+    # HELA den nya funktionen här
+    ...
+
+# PATCH: Lägg till denna nya funktion efter rad X / efter def foo():
+def ny_funktion():
+    ...
+  </content>
+</file>
+
+NÄR DU SKAPAR EN NY FIL (<300 rader):
+Returnera hela filen normalt med action=create.
+
+RETURNERA EXAKT detta XML-format:
+<response>
+<summary>Kort beskrivning</summary>
+<file>
+  <path>relativ/sökväg/fil.py</path>
+  <action>create/modify/patch/delete</action>
   <description>Vad filen gör</description>
   <content>
-HELA FILINNEHÅLLET HÄR — komplett, körbart
+KOD HÄR
   </content>
 </file>
 </response>
 
-KRITISKT: <content> måste innehålla HELA filinnehållet. Aldrig tomt.
-KRITISKT: Om du modifierar app.py eller index.html — returnera HELA filen, inte bara ändrade delar.
-KRITISKT: En trunkerad fil (bara 10-20% av originalet) är värre än ingen ändring alls.
-Om du inte kan returnera hela filen: returnera en ny hjälpfil + beskriv ändringen i summary istället. action = create/modify/delete."""
+KRITISKT: Skapa aldrig patch_*.py, install_*.py eller startup_*.py — integrera direkt.
+KRITISKT: <content> får aldrig vara tomt.
+KRITISKT: action=patch betyder att du returnerar BARA ändrade funktioner med # PATCH: kommentarer."""
 
 async def build_code(spec: dict, pid: str) -> tuple[list, str]:
     s = load_settings()
@@ -772,7 +796,7 @@ async def build_code(spec: dict, pid: str) -> tuple[list, str]:
     try:
         response = client_inst.messages.create(
             model=model_for("snickare", s), max_tokens=16000, system=SNICKARE_PROMPT,
-            messages=[{"role":"user","content":f"FEATURE-SPEC:\n{spec_text}\n\nBEFINTLIG KODBAS:\n{context}\n\nGenerera koden nu. Returnera ENBART XML med <response><summary>...</summary><file>...</file></response>"}])
+            messages=[{"role":"user","content":f"FEATURE-SPEC:\n{spec_text}\n\nBEFINTLIG KODBAS (INDEX + SEKTIONER):\n{context}\n\nVIKTIGT: För app.py och index.html — använd action=patch och returnera BARA de ändrade funktionerna med # PATCH: prefix. Returnera ALDRIG hela filen. Generera koden nu. Returnera ENBART XML."}])
         text = response.content[0].text.strip()
         import re as _re
         # Parsa XML-format
@@ -800,7 +824,30 @@ async def build_code(spec: dict, pid: str) -> tuple[list, str]:
             except Exception:
                 pass
         # Rensa filer med tomt content (förhindrar tomma diffs)
-        files = [f for f in files if f.get("content","").strip() or f.get("action") == "delete"]
+        # Filtrera ogiltiga filer + tidig storlek-guard
+        def _valid_file(f):
+            p = f.get("path","").strip()
+            c = f.get("content","").strip()
+            if not p or p in ("?", "unknown", "...", "path/to/file"): return False
+            if f.get("action") in ("delete","patch"): return True
+            if not c or len(c) < 10: return False
+            return True
+        files = [f for f in files if _valid_file(f)]
+        # Avvisa trunkerade filer innan diff visas för användaren
+        rd_check = effective_repo_dir(pid)
+        safe_files = []
+        for _f in files:
+            _act = _f.get("action","create")
+            if _act in ("delete","patch"):
+                safe_files.append(_f); continue
+            _fp = rd_check / _f.get("path","")
+            if _fp.exists() and str(_fp).endswith(".py"):
+                _orig = len(_fp.read_text(encoding="utf-8", errors="ignore"))
+                _new  = len(_f.get("content",""))
+                if _orig > 5000 and _new < _orig * 0.3:
+                    continue  # trunkerad — hoppa över
+            safe_files.append(_f)
+        files = safe_files
         if not files:
             # Fallback 2: Direkt kod i svaret
             if any(kw in text for kw in ["def ", "class ", "import ", "function ", "const ", "async "]):
@@ -889,6 +936,23 @@ def apply_and_push(pid: str, feature_name: str, env: str = "dev") -> str:
             if fpath.name == "app.py" and fpath.exists():
                 _sh_guard.copy2(str(fpath), str(fpath)+".bak")
             prev_size = len(fpath.read_text(encoding="utf-8",errors="ignore")) if fpath.exists() else 0
+            # Patch-läge: applicera PATCH-kommenterade funktioner direkt i filen
+            if action == "patch" and fpath.exists() and str(fpath).endswith(".py"):
+                import re as _rp
+                orig = fpath.read_text(encoding="utf-8", errors="ignore")
+                patched = orig
+                blocks = _rp.split(r"(?m)^# PATCH:", cw)
+                for blk in blocks[1:]:
+                    blk = blk.strip()
+                    m = _rp.search(r"^(?:async )?def (\w+)", blk, _rp.MULTILINE)
+                    if m:
+                        fn = m.group(1)
+                        pat = _rp.compile(r"^(?:async )?def " + fn + r"\b.*?(?=^(?:async )?def |\Z)", _rp.MULTILINE | _rp.DOTALL)
+                        if pat.search(patched):
+                            patched = pat.sub(blk.rstrip() + "\n\n", patched, count=1)
+                        else:
+                            patched = patched.rstrip() + "\n\n" + blk + "\n"
+                cw = patched
             fpath.write_text(cw, encoding="utf-8")
             # Logga stora fil-ändringar i memory (>10% storlek-förändring)
             if prev_size > 5000 and str(fpath).endswith('.py'):
@@ -2020,25 +2084,123 @@ async def review_feature(payload: dict):
 # Build
 @app.post("/api/build")
 async def build_feature(payload: dict):
-    feature_name=payload.get("feature_name","Okänd"); spec_obj=payload.get("spec_obj",{})
-    proj=get_active_project()
-    if not proj: return JSONResponse({"error":"Inget aktivt projekt"},status_code=400)
-    await manager.broadcast({"type":"build_start","feature":feature_name})
-    await manager.broadcast({"type":"build_progress","message":"Klonar/uppdaterar repo från GitHub..."})
-    loop=asyncio.get_event_loop()
-    file_changes, result = await loop.run_in_executor(None, lambda: build_code_sync(spec_obj, proj["id"]))
-    if isinstance(result, str) and result and not file_changes:
-        await manager.broadcast({"type":"build_error","message":result}); return JSONResponse({"error":result},status_code=500)
-    await manager.broadcast({"type":"build_progress","message":"Beräknar diff..."})
-    diffs=compute_diffs(proj["id"], file_changes)
-    store_pending(proj["id"], file_changes, feature_name)
-    await manager.broadcast({"type":"build_done","feature":feature_name,"diffs":diffs,"summary":result})
+    """3-fas pipeline: Design → Bygg → QA med auto-retry (max 3 varv)."""
+    feature_name = payload.get("feature_name","Okänd")
+    spec_obj     = payload.get("spec_obj", {})
+    proj = get_active_project()
+    if not proj: return JSONResponse({"error":"Inget aktivt projekt"}, status_code=400)
+    s = load_settings()
+    loop = asyncio.get_event_loop()
+    MAX_QA_RETRIES = 3
 
-    # ── Besiktningsmannen — kör post-build på den färdiga koden ──────────────
-    asyncio.ensure_future(_run_inspector_post_build(
-        feature_name, diffs, proj, load_settings()))
+    # ── FAS 1: DESIGN — hämta agenternas råd och bygg spec ───────────────────
+    await manager.broadcast({"type":"phase_start","phase":1,"name":"Design","feature":feature_name})
+    cache = _review_cache.get(feature_name, {})
+    arkitekt_plan   = cache.get("arkitekt_plan", "")
+    radgivande_recs = cache.get("radgivande_recs", [])
+    agent_findings  = []
+    for r in cache.get("results", []):
+        for f in r.get("findings", [])[:2]:
+            agent_findings.append(f"{r.get('agent','?')}: {f}")
+    design_brief = ""
+    if arkitekt_plan:
+        design_brief += f"ARKITEKTPLAN:\n{arkitekt_plan}\n\n"
+    if agent_findings:
+        design_brief += "AGENTERNAS KRAV (MÅSTE IMPLEMENTERAS):\n" + "\n".join(f"• {f}" for f in agent_findings[:12])
+    if radgivande_recs:
+        design_brief += "\n\nREKOMMENDATIONER:\n" + "\n".join(f"• {r}" for r in radgivande_recs[:6])
+    enriched_spec = dict(spec_obj)
+    if design_brief:
+        enriched_spec["design_brief"] = design_brief
+    await manager.broadcast({"type":"phase_done","phase":1,"name":"Design",
+        "summary":f"Arkitektplan + {len(agent_findings)} agentfynd redo för Snickaren"})
 
-    return JSONResponse({"diffs":diffs,"summary":result,"files_count":len(file_changes)})
+    # ── FAS 2+3: BYGG → QA loop ───────────────────────────────────────────────
+    qa_feedback = ""
+    final_diffs = []
+    final_summary = ""
+    for attempt in range(1, MAX_QA_RETRIES + 1):
+        # FAS 2: BYGG
+        phase2_msg = f"Snickaren bygger (försök {attempt}/{MAX_QA_RETRIES})..." if attempt > 1 else "Snickaren bygger..."
+        await manager.broadcast({"type":"phase_start","phase":2,"name":"Bygg","feature":feature_name,"attempt":attempt})
+        await manager.broadcast({"type":"build_start","feature":feature_name})
+        await manager.broadcast({"type":"build_progress","message":phase2_msg})
+
+        if qa_feedback:
+            enriched_spec["qa_feedback"] = f"QA HITTADE PROBLEM (MÅSTE FIXAS I DETTA BYGGE):\n{qa_feedback}"
+
+        file_changes, result = await loop.run_in_executor(None, lambda s=enriched_spec: build_code_sync(s, proj["id"]))
+        if isinstance(result, str) and result.startswith("SYNTAX-GUARD"):
+            await manager.broadcast({"type":"build_error","message":result,"feature":feature_name})
+            return JSONResponse({"error":result}, status_code=500)
+        if not file_changes:
+            await manager.broadcast({"type":"build_error","message":result or "Snickaren returnerade inga filer","feature":feature_name})
+            return JSONResponse({"error":result}, status_code=500)
+
+        await manager.broadcast({"type":"build_progress","message":f"Diff klar — {len(file_changes)} fil(er)"})
+        diffs = compute_diffs(proj["id"], file_changes)
+        store_pending(proj["id"], file_changes, feature_name)
+        await manager.broadcast({"type":"phase_done","phase":2,"name":"Bygg","attempt":attempt,
+            "files":len(file_changes)})
+
+        # FAS 3: QA
+        await manager.broadcast({"type":"phase_start","phase":3,"name":"QA","feature":feature_name,"attempt":attempt})
+        await manager.broadcast({"type":"inspect_start","feature":feature_name})
+
+        diff_text = ""
+        for d in diffs[:6]:
+            lines_added = [l["content"] for l in d.get("lines",[]) if l.get("type")=="add"][:30]
+            diff_text += f"\n### {d.get('path','?')} ({d.get('action','?')}, +{d.get('added',0)}/-{d.get('removed',0)})\n"
+            diff_text += "\n".join(lines_added)
+
+        qa_input = (
+            f"FEATURE: {feature_name}\n\nSPEC:\n{json.dumps(spec_obj,ensure_ascii=False)[:800]}\n\n"
+            f"AGENTERNAS KRAV:\n" + "\n".join(f"• {f}" for f in agent_findings[:8]) +
+            f"\n\nKODDIFF FRÅN SNICKAREN (FÖRSÖK {attempt}):\n{diff_text[:3000]}"
+        )
+
+        QA_PROMPT = (
+            "Du är QA-ansvarig. Granska om Snickaren implementerade det som krävdes.\n"
+            "Kontrollera ENBART:\n"
+            "1. Implementerades agenternas krav? (lista saknade krav som findings)\n"
+            "2. Finns uppenbara syntaxfel eller logikfel i diffsen?\n"
+            "3. Är filer kompletta (inte trunkerade)?\n"
+            "Returnera ENBART JSON:\n"
+            '{"status":"GODKÄND"/"AVVISAD","findings":["Exakt vad som saknas"],'
+            '"severity":"LOW"/"MEDIUM"/"HIGH","suggestions":["Hur Snickaren ska fixa det"]}'
+        )
+        _, inspector = get_agents_from_settings(s)
+        qa_agent = dict(inspector); qa_agent["prompt"] = QA_PROMPT
+        memory = load_memory(proj["id"])
+        insp = await loop.run_in_executor(None, run_agent, qa_agent, qa_input, memory, "", s, "")
+
+        insp_status  = insp.get("status","GODKÄND")
+        insp_findings = insp.get("findings", [])
+        insp_severity = insp.get("severity","LOW")
+        insp_approved = insp_status in ("GODKÄND","GODKAND")
+
+        await manager.broadcast({"type":"inspector_done","feature":feature_name,
+            "approved":insp_approved,"findings":insp_findings,
+            "severity":insp_severity,"attempt":attempt})
+        await manager.broadcast({"type":"phase_done","phase":3,"name":"QA","attempt":attempt,
+            "approved":insp_approved,"issues":len(insp_findings)})
+
+        if insp_approved or insp_severity in ("LOW","MEDIUM") or attempt == MAX_QA_RETRIES:
+            # QA godkänner eller vi har kört max — visa diff för användaren
+            final_diffs   = diffs
+            final_summary = result
+            break
+        else:
+            # QA underkänner med HIGH — ge feedback till Snickaren och bygg om
+            qa_feedback = "\n".join(f"• {f}" for f in insp_findings[:6])
+            qa_sugg     = "\n".join(f"• {sg}" for sg in insp.get("suggestions",[])[:4])
+            if qa_sugg: qa_feedback += f"\n\nSå fixar du det:\n{qa_sugg}"
+            await manager.broadcast({"type":"build_progress",
+                "message":f"⚠️ QA underkände (HIGH) — Snickaren bygger om med feedback... (försök {attempt+1}/{MAX_QA_RETRIES})"})
+
+    await manager.broadcast({"type":"build_done","feature":feature_name,
+        "diffs":final_diffs,"summary":final_summary})
+    return JSONResponse({"diffs":final_diffs,"summary":final_summary,"files_count":len(file_changes)})
 
 async def _run_inspector_post_build(feature_name: str, diffs: list, proj: dict, s: dict):
     """Kör Besiktningsmannen på byggd kod — asynkront, blockerar inte build-svaret."""

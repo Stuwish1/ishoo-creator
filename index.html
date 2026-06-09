@@ -409,6 +409,44 @@ header h1{font-size:14px;font-weight:700;margin-right:4px;}
 .status-detail  { color:var(--muted); flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .status-elapsed { color:var(--muted); font-size:11px; white-space:nowrap; margin-left:auto; }
 
+
+/* ═══ FAS-INDIKATOR ═══ */
+.phase-bar {
+  display: flex; align-items: center; justify-content: center;
+  padding: 8px 16px; gap: 0; flex-shrink: 0;
+  background: var(--surface); border-bottom: 1px solid var(--border);
+}
+.phase-step {
+  display: flex; flex-direction: column; align-items: center;
+  gap: 4px; min-width: 64px; cursor: default;
+  transition: opacity .3s;
+  opacity: .35;
+}
+.phase-step.active  { opacity: 1; }
+.phase-step.done    { opacity: 1; }
+.phase-step.retry   { opacity: 1; }
+.phase-step span { font-size: 11px; color: var(--muted); font-weight: 500; }
+.phase-step.active span { color: #3b82f6; }
+.phase-step.done   span { color: #22c55e; }
+.phase-step.retry  span { color: #f59e0b; }
+.phase-dot {
+  width: 12px; height: 12px; border-radius: 50%;
+  background: var(--border); border: 2px solid var(--border);
+  transition: background .3s, border-color .3s, box-shadow .3s;
+}
+.phase-step.active .phase-dot {
+  background: #3b82f6; border-color: #3b82f6;
+  box-shadow: 0 0 0 4px rgba(59,130,246,.2);
+  animation: pulseDot 1.2s infinite;
+}
+.phase-step.done .phase-dot   { background: #22c55e; border-color: #22c55e; }
+.phase-step.retry .phase-dot  { background: #f59e0b; border-color: #f59e0b; }
+.phase-line {
+  flex: 1; height: 2px; background: var(--border);
+  min-width: 32px; margin-bottom: 16px;
+  transition: background .3s;
+}
+
 </style>
 </head>
 <body>
@@ -485,6 +523,20 @@ header h1{font-size:14px;font-weight:700;margin-right:4px;}
       <span class="iter-banner-label" id="iterBannerLabel"></span>
     </div>
     <div class="iter-banner-steps" id="iterBannerSteps"></div>
+  </div>
+  <!-- ═══ FAS-INDIKATOR ═══ -->
+  <div id="phaseBar" class="phase-bar" style="display:none">
+    <div class="phase-step" id="phase1" data-phase="1">
+      <div class="phase-dot"></div><span>Design</span>
+    </div>
+    <div class="phase-line"></div>
+    <div class="phase-step" id="phase2" data-phase="2">
+      <div class="phase-dot"></div><span>Bygg</span>
+    </div>
+    <div class="phase-line"></div>
+    <div class="phase-step" id="phase3" data-phase="3">
+      <div class="phase-dot"></div><span>QA</span>
+    </div>
   </div>
   <!-- ═══ PERSISTENT STATUS STRIP ═══ -->
   <div id="statusStrip" class="status-strip idle">
@@ -945,6 +997,33 @@ let _statusTimer = null;
 let _statusStart = null;
 let _statusElapsedInterval = null;
 
+// ═══ FAS-INDIKATOR ═══
+let _currentPhase = 0;
+function updatePhaseIndicator(phase, state, attempt) {
+  const bar = document.getElementById('phaseBar');
+  if(bar) bar.style.display = 'flex';
+  _currentPhase = phase;
+  for(let p = 1; p <= 3; p++) {
+    const el = document.getElementById('phase'+p);
+    if(!el) continue;
+    const line = el.nextElementSibling;
+    if(p < phase)       { el.className='phase-step done'; if(line && line.classList.contains('phase-line')) line.style.background='#22c55e'; }
+    else if(p === phase){ el.className='phase-step '+state; }
+    else                { el.className='phase-step'; }
+    const span = el.querySelector('span');
+    if(span) {
+      const labels = {1:'Design',2:'Bygg',3:'QA'};
+      span.textContent = p === phase && attempt > 1 ? labels[p]+' ('+attempt+'x)' : labels[p];
+    }
+  }
+  // Dölj bar när allt är klart
+  if(phase === 3 && (state === 'done' || state === 'retry') && attempt >= 3) {
+    setTimeout(()=>{ if(bar) bar.style.display='none'; _currentPhase=0;
+      document.querySelectorAll('.phase-step').forEach(e=>e.className='phase-step');
+    }, 6000);
+  }
+}
+
 function setStatus(phase, detail, state='active') {
   const strip    = document.getElementById('statusStrip');
   const phaseEl  = document.getElementById('statusPhase');
@@ -991,6 +1070,19 @@ const STATUS_MAP = {
   'debug_done':        (m) => setStatus('🐛 Felsökning klar', (m.issues_found||0)+' problem hittade', 'done'),
   'inspector_done':    (m) => setStatus('🏗️ Besiktning', m.approved ? 'Koden godkänd ✅' : 'Problem hittades ⚠️', m.approved?'done':'error'),
   'loop_blocked':      (m) => setStatus('⏸️ Väntar', 'Pipeline körs redan ('+m.elapsed+'s)…', 'active'),
+  'phase_start':       (m) => {
+    const names = {1:'🎨 Design', 2:'🔨 Bygg', 3:'🔍 QA'};
+    const label = names[m.phase] || m.name;
+    const detail = m.attempt > 1 ? m.name+' — försök '+m.attempt : m.name+' — "'+( m.feature||'')+'"';
+    setStatus(label, detail);
+    updatePhaseIndicator(m.phase, 'active', m.attempt||1);
+  },
+  'phase_done':        (m) => {
+    const names = {1:'🎨 Design klar', 2:'🔨 Bygg klar', 3:'🔍 QA klar'};
+    const label = names[m.phase] || m.name+' klar';
+    const ok = m.approved !== false;
+    updatePhaseIndicator(m.phase, ok ? 'done' : 'retry', m.attempt||1);
+  },
 };
 
 function handleStatusStrip(msg) {
