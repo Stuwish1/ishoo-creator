@@ -31,7 +31,7 @@
     "id": 2,
     "name": "Clipboard Image Input: Fixa duplicerad git_push_direct endpoint",
     "phase": "MVP",
-    "status": "Planerad",
+    "status": "Granskas",
     "parent_feature": "Clipboard Image Input",
     "spec": {
       "name": "Clipboard Image Input: Fixa duplicerad git_push_direct endpoint",
