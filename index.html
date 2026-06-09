@@ -1650,7 +1650,7 @@ function handleWS(msg){
         <button onclick="diskuteraBygg('${(msg.feature||'').replace(/'/g,"\'")}')" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:12px;padding:9px 16px;cursor:pointer">💬 Diskutera först</button>
         <button onclick="startReview()" style="background:transparent;border:none;color:var(--muted);font-size:11px;cursor:pointer;text-decoration:underline">Kör full agentgranskning</button>
       </div>
-    </div>`,true);
+    </div>`,true,true); // skipHistory — HTML-kort ska ej till API
     showActionBar('reviewed', msg.feature||currentFeature);
     loadFeatures();
   }
@@ -2220,7 +2220,7 @@ async function sendMessage(){
   // Visa user-meddelande med bilder
   let userHtml=text?`<div>${text.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</div>`:'';
   if(imgs.length) userHtml+=imgs.map(i=>`<img src="${i.dataUrl}" style="max-width:180px;border-radius:8px;margin-top:4px;display:block;">`).join('');
-  addMsg('user',userHtml,true);
+  addMsg('user',userHtml,true,true); // visning bara — chatHistory hanteras nedan
   const fullText=text+(imgs.length?`
 
 [${imgs.length} bild(er) bifogad(e)]`:'');
@@ -2235,7 +2235,7 @@ async function sendMessage(){
       let display=d.reply.replace(/\[ONBOARDING_KLAR\][\s\S]*?\[\/ONBOARDING_KLAR\]/g,'').trim();
       addLog(`✅ Projektledaren svarade`, 'success');
       updateLogStatus('Redo', 'idle');
-      addMsg('assistant',display);onboardingHistory.push({role:'assistant',content:d.reply});
+      addMsg('assistant',display,false,true);onboardingHistory.push({role:'assistant',content:d.reply}); // skipHistory — onboardingHistory hanterar detta
       if(d.onboarding_complete){
         onboardingProjectId=null;onboardingHistory=[];
         hideOnboardingBanner();
@@ -2259,7 +2259,7 @@ async function sendMessage(){
         body:JSON.stringify({message:text,history:chatHistory.slice(-12)})});
       const d=await r.json(); removeTyping(tid);
       let display=d.reply.replace(/\[FEATURE_KLAR\][\s\S]*?\[\/FEATURE_KLAR\]/g,'').replace(/\[SYSTEM_KLAR\][\s\S]*?\[\/SYSTEM_KLAR\]/g,'').trim();
-      addMsg('assistant',display);chatHistory.push({role:'assistant',content:d.reply});
+      addMsg('assistant',display); // addMsg hanterar chatHistory (display, utan FEATURE_KLAR-taggar)
       if(d.question) showOptions(d.question);
       else hideOptions();
       if(d.feature_detected&&d.feature_spec){
@@ -2271,7 +2271,7 @@ async function sendMessage(){
           <div style="font-weight:700;font-size:14px;margin-bottom:4px">📋 ${d.feature_detected} <span style="font-weight:400;font-size:11px;color:var(--muted)">[${d.feature_spec.phase||'MVP'}]</span></div>
           ${acText}
           <div style="margin-top:10px;font-size:11px;color:var(--accent)">⏳ Konsulterar agenter i bakgrunden...</div>
-        </div>`,true);
+        </div>`,true,true); // skipHistory — HTML-kort ej till API
         loadSuggestions(d.feature_spec);
         loadFeatures();
         // Auto-starta konsultation i bakgrunden
@@ -2960,7 +2960,7 @@ function setProgress(pct,lbl){
   document.getElementById('pipeLabel').textContent=lbl;
 }
 
-function addMsg(role,text,isHtml=false){
+function addMsg(role,text,isHtml=false,skipHistory=false){
   const msgs=document.getElementById('messages');
   const div=document.createElement('div');
   div.className=`msg ${role}`;
@@ -2974,7 +2974,7 @@ function addMsg(role,text,isHtml=false){
   }
   msgs.appendChild(div);
   msgs.scrollTop=msgs.scrollHeight;
-  if(role==='user'||role==='assistant'){
+  if(!skipHistory&&(role==='user'||role==='assistant')){
     chatHistory.push({role:role==='user'?'user':'assistant',content:text});
     if(chatHistory.length>40)chatHistory=chatHistory.slice(-40);
     saveChatHistory();

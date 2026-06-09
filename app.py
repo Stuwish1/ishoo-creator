@@ -1817,41 +1817,53 @@ async def delete_feature(feature_name: str):
 # Chat
 @app.post("/api/chat")
 async def chat(payload: dict):
-    message=payload.get("message",""); history=payload.get("history",[])
+    message=payload.get("message","").strip(); history=payload.get("history",[])
+    if not message:
+        return JSONResponse({"reply":"","feature_detected":None,"feature_spec":None,"system_config":None,"question":None})
     proj=get_active_project()
-    if not proj: return JSONResponse({"reply":"Inget aktivt projekt.","feature_detected":None,"feature_spec":None})
+    if not proj: return JSONResponse({"reply":"Inget aktivt projekt.","feature_detected":None,"feature_spec":None,"system_config":None,"question":None})
     s = load_settings()
     client_inst = get_client(s)
-    if not client_inst: return JSONResponse({"reply":"⚠️ API-nyckel saknas. Gå till Inställningar (⚙️) och lägg till din Anthropic API-nyckel.","feature_detected":None,"feature_spec":None})
-    memory=load_memory(proj["id"]); phases=phases_summary(proj["id"])
-    # Ge Projektledaren full kontext — kodbas + git + backlog
-    rd_chat = effective_repo_dir(proj["id"])
-    code_ctx_chat = read_codebase_context(rd_chat, {"name": message, "problem": message, "solution": ""}) if rd_chat.exists() else ""
-    live_ctx = _gather_live_context(proj)
-    if code_ctx_chat:
-        live_ctx += f"\n\nKODBAS (relevanta delar):\n{code_ctx_chat[:8000]}"
-    system=PROJEKTLEDARE_PROMPT.format(project_name=proj["name"],project_desc=proj.get("description",""),
-        project_github=proj.get("github","Ej angivet"),memory=memory,phases=phases,live_context=live_ctx)
-    _strategic_kw = ("vad ska","vad bör","nästa steg","prioriter","hur mår","vad är kvar",
-                     "vad borde","status","läget","vad återstår")
-    _is_strategic = any(kw in message.lower() for kw in _strategic_kw)
-    _max_tok = 3000 if _is_strategic else 1500
-    response=client_inst.messages.create(model=model_for("projektledare",s),max_tokens=_max_tok,system=system,
-        messages=history[-16:]+[{"role":"user","content":message}],
-        timeout=90.0)
-    reply=response.content[0].text
-    feature_spec=parse_feature_klar(reply); feature_name=None
-    if feature_spec:
-        feature_name=feature_spec.get("name","Okänd")
-        add_feature(proj["id"],feature_name,feature_spec.get("phase","MVP"),feature_spec)
-    system_config = parse_system_klar(reply)
-    question = parse_fraga(reply)
-    # Rensa [FRÅGA]-blocket från reply-texten som visas
-    clean_reply = reply
-    if question:
-        import re as _re
-        clean_reply = _re.sub(r'\[FRÅGA\][\s\S]*?\[/FRÅGA\]', '', reply).strip()
-    return JSONResponse({"reply":clean_reply,"feature_detected":feature_name,"feature_spec":feature_spec,"system_config":system_config,"question":question})
+    if not client_inst: return JSONResponse({"reply":"⚠️ API-nyckel saknas. Gå till Inställningar (⚙️) och lägg till din Anthropic API-nyckel.","feature_detected":None,"feature_spec":None,"system_config":None,"question":None})
+    try:
+        memory=load_memory(proj["id"]); phases=phases_summary(proj["id"])
+        # Ge Projektledaren full kontext — kodbas + git + backlog
+        rd_chat = effective_repo_dir(proj["id"])
+        code_ctx_chat = read_codebase_context(rd_chat, {"name": message, "problem": message, "solution": ""}) if rd_chat.exists() else ""
+        live_ctx = _gather_live_context(proj)
+        if code_ctx_chat:
+            live_ctx += f"\n\nKODBAS (relevanta delar):\n{code_ctx_chat[:8000]}"
+        system=PROJEKTLEDARE_PROMPT.format(project_name=proj["name"],project_desc=proj.get("description",""),
+            project_github=proj.get("github","Ej angivet"),memory=memory,phases=phases,live_context=live_ctx)
+        _strategic_kw = ("vad ska","vad bör","nästa steg","prioriter","hur mår","vad är kvar",
+                         "vad borde","status","läget","vad återstår")
+        _is_strategic = any(kw in message.lower() for kw in _strategic_kw)
+        _max_tok = 3000 if _is_strategic else 1500
+        response=client_inst.messages.create(model=model_for("projektledare",s),max_tokens=_max_tok,system=system,
+            messages=history[-16:]+[{"role":"user","content":message}],
+            timeout=90.0)
+        reply=response.content[0].text
+        feature_spec=parse_feature_klar(reply); feature_name=None
+        if feature_spec:
+            feature_name=feature_spec.get("name","Okänd")
+            add_feature(proj["id"],feature_name,feature_spec.get("phase","MVP"),feature_spec)
+        system_config = parse_system_klar(reply)
+        question = parse_fraga(reply)
+        # Rensa [FRÅGA]-blocket från reply-texten som visas
+        clean_reply = reply
+        if question:
+            import re as _re
+            clean_reply = _re.sub(r'\[FRÅGA\][\s\S]*?\[/FRÅGA\]', '', reply).strip()
+        return JSONResponse({"reply":clean_reply,"feature_detected":feature_name,"feature_spec":feature_spec,"system_config":system_config,"question":question})
+    except Exception as e:
+        err_msg = str(e)
+        if "overloaded" in err_msg.lower():
+            reply_err = "⚠️ Anthropic API är överbelastad just nu — försök igen om en stund."
+        elif "timeout" in err_msg.lower():
+            reply_err = "⚠️ Projektledaren tog för lång tid att svara (timeout 90s). Försök med en kortare fråga."
+        else:
+            reply_err = f"⚠️ Fel från Projektledaren: {err_msg[:200]}"
+        return JSONResponse({"reply":reply_err,"feature_detected":None,"feature_spec":None,"system_config":None,"question":None})
 
 # Review — EN enda pass. Om något agent säger ifrån → Domaren direkt.
 @app.post("/api/review")
