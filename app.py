@@ -915,6 +915,13 @@ def store_pending(pid: str, file_changes: list, feature_name: str):
     p = project_dir(pid) / "pending_changes.json"
     p.write_text(json.dumps({"feature":feature_name,"files":file_changes},ensure_ascii=False,indent=2),encoding="utf-8")
 
+
+def clear_pending(pid: str):
+    """Rensa pending_changes.json efter lyckad push."""
+    p = project_dir(pid) / "pending_changes.json"
+    if p.exists():
+        p.write_text('{"files":[],"feature":"","timestamp":""}', encoding="utf-8")
+
 def load_pending(pid: str) -> dict:
     p = project_dir(pid) / "pending_changes.json"
     return json.loads(p.read_text(encoding="utf-8")) if p.exists() else {}
@@ -2152,6 +2159,10 @@ async def build_feature(payload: dict):
     proj = get_active_project()
     if not proj: return JSONResponse({"error":"Inget aktivt projekt"}, status_code=400)
     s = load_settings()
+    if not s.get("api_key"):
+        await manager.broadcast({"type":"build_error","feature":feature_name,
+            "message":"API-nyckel saknas — gå till ⚙️ Inställningar och lägg in din Anthropic-nyckel."})
+        return JSONResponse({"error":"API-nyckel saknas"}, status_code=400)
     loop = asyncio.get_event_loop()
     MAX_QA_RETRIES = 3
 
@@ -2401,6 +2412,7 @@ Var kortfattad — detta är kontextfil för AI-agenter."""
             pass
     asyncio.ensure_future(_regen_index())
 
+    clear_pending(proj['id'])
     await manager.broadcast({"type":"push_done","feature":feature_name,"env":env})
     return JSONResponse({"success":True})
 
@@ -3583,6 +3595,217 @@ async def start_file_watcher():
             except Exception:
                 pass
     asyncio.ensure_future(_watch())
+
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# /api/iterate  — Agentiteration mot kodbasen
+# ═══════════════════════════════════════════════════════════════════════════════
+
+ITERATE_PROMPT_SUFFIX = """
+
+ITERATE-LÄGE: Du genomför nu en självständig kodbas-genomgång.
+Din uppgift: sök igenom kodbasen och hitta alla problem INOM DITT ANSVARSOMRÅDE.
+
+Fokusera enbart på konkreta, faktiska problem du ser i koden — inte hypotetiska.
+För varje problem: ange var i koden det finns (fil, funktion) om möjligt.
+
+Returnera ENBART JSON:
+{
+  "findings": [
+    {
+      "title": "Kort titel max 8 ord",
+      "simple": "Enkel förklaring utan jargong (1-2 meningar som vem som helst förstår)",
+      "detail": "Teknisk detalj: fil, funktion, vad som är fel och varför",
+      "fix": "Konkret åtgärd: exakt vad Snickaren ska göra för att fixa det",
+      "severity": "HIGH",
+      "file": "filnamn.py"
+    }
+  ],
+  "status": "HITTADE",
+  "summary": "En mening om läget i detta område"
+}
+
+severity-regler: HIGH = måste fixas innan annat kan byggas, MEDIUM = bör fixas snart, LOW = förbättring.
+Om inga problem hittas: returnera {"findings": [], "status": "RENT", "summary": "Inga problem hittades"}
+"""
+
+# Prioritetsordning för byggordsföljd
+_ITERATE_PRIORITY = [
+    "security", "dba", "felhantering", "typgranskare", "beroendeanalytiker",
+    "architect", "ansvarsfordelning", "konfiguration",
+    "backend", "frontend", "uidesigner",
+    "performance", "tillganglighet", "ux", "mobile", "tester",
+    "kravanalytiker", "strukturnavigator", "inspector",
+]
+
+def _iterate_order_findings(all_results: list) -> list:
+    """Sortera fynd i byggordsföljd: säkerhet→arkitektur→backend→frontend→ux."""
+    flat = []
+    for r in all_results:
+        agent_id  = r.get("id", "")
+        agent_name = r.get("agent", "")
+        summary   = r.get("summary", "")
+        for f in r.get("findings", []):
+            flat.append({
+                "agent_id":   agent_id,
+                "agent_name": agent_name,
+                "agent_summary": summary,
+                "title":   f.get("title", ""),
+                "simple":  f.get("simple", ""),
+                "detail":  f.get("detail", ""),
+                "fix":     f.get("fix", ""),
+                "severity": f.get("severity", "LOW"),
+                "file":    f.get("file", ""),
+            })
+    sev_order = {"HIGH": 0, "MEDIUM": 1, "LOW": 2}
+    def _sort_key(item):
+        try:
+            agent_rank = _ITERATE_PRIORITY.index(item["agent_id"])
+        except ValueError:
+            agent_rank = 99
+        return (sev_order.get(item["severity"], 2), agent_rank)
+    flat.sort(key=_sort_key)
+    # Numrera steg
+    for i, f in enumerate(flat, 1):
+        f["step"] = i
+    return flat
+
+
+@app.post("/api/iterate")
+async def iterate_agents(payload: dict):
+    """Kör en eller alla agenter mot kodbasen i iterate-läge.
+    Returnerar fynd ordnade i byggordsföljd (säkerhet→arkitektur→backend→ux).
+    payload: { agent_id?: str }
+    """
+    agent_id = payload.get("agent_id")   # None = alla agenter
+    proj = get_active_project()
+    if not proj:
+        return JSONResponse({"error": "Inget aktivt projekt"}, status_code=400)
+    s = load_settings()
+    if not s.get("api_key"):
+        return JSONResponse({"error": "API-nyckel saknas"}, status_code=400)
+
+    all_agents, _ = get_agents_from_settings(s)
+    if agent_id:
+        agents_to_run = [a for a in all_agents if a["id"] == agent_id]
+        if not agents_to_run:
+            return JSONResponse({"error": f"Agent '{agent_id}' hittades inte"}, status_code=404)
+    else:
+        agents_to_run = all_agents
+
+    rd = effective_repo_dir(proj["id"])
+    memory = load_memory(proj["id"])
+    code_ctx_claude = read_codebase_context(rd, {}, for_ollama=False) if rd.exists() else ""
+    code_ctx_ollama = read_codebase_context(rd, {}, for_ollama=True)  if rd.exists() else ""
+
+    def ctx_for(ag: dict) -> str:
+        return code_ctx_ollama if ag.get("model", "").startswith("ollama:") else code_ctx_claude
+
+    loop = asyncio.get_event_loop()
+
+    await manager.broadcast({
+        "type": "iterate_start",
+        "agent_id": agent_id,
+        "total": len(agents_to_run),
+        "agents": [{"id": a["id"], "name": f"{a.get('emoji','')}{a['name']}"} for a in agents_to_run]
+    })
+
+    results = []
+    ex = ThreadPoolExecutor(max_workers=min(len(agents_to_run), 8))
+
+    def _run_iterate(ag: dict) -> dict:
+        # Bygg iterate-prompt: originalprompt + iterate-suffix
+        iterate_ag = dict(ag)
+        original_prompt = ag.get("prompt", "")
+        # Ta bara de första 400 tecknen av originalprompt (ansvarsområde)
+        short_desc = original_prompt[:400].split("\n")[0] if original_prompt else ag["name"]
+        iterate_ag["prompt"] = (
+            f"Du är {ag['name']}. Ditt ansvarsområde: {short_desc}\n"
+            + ITERATE_PROMPT_SUFFIX
+        )
+        return run_agent(iterate_ag, "ITERERA KODBASEN", memory, "", s, ctx_for(ag))
+
+    try:
+        from concurrent.futures import as_completed as _as_completed
+        future_map = {ex.submit(_run_iterate, ag): ag for ag in agents_to_run}
+        pending = set(future_map.keys())
+        while pending:
+            done = await loop.run_in_executor(None,
+                lambda fs=list(pending): next(_as_completed(fs)))
+            pending.discard(done)
+            ag = future_map[done]
+            try:
+                result = done.result()
+            except Exception as e:
+                result = {"id": ag["id"], "agent": ag["name"],
+                          "findings": [], "status": "RENT",
+                          "summary": f"Agent-fel: {e}"}
+            result["id"]    = result.get("id") or ag["id"]
+            result["agent"] = result.get("agent") or ag["name"]
+            results.append(result)
+            await manager.broadcast({
+                "type": "iterate_agent_done",
+                "id":       result["id"],
+                "name":     result["agent"],
+                "status":   result.get("status", "RENT"),
+                "summary":  result.get("summary", ""),
+                "count":    len(result.get("findings", [])),
+                "findings": result.get("findings", [])[:5],
+            })
+    finally:
+        ex.shutdown(wait=False)
+
+    # Ordna i byggordsföljd
+    ordered = _iterate_order_findings(results)
+
+    # Syntes: Projektledaren skapar en prioriterad handlingsplan
+    clean_agents = [r for r in results if r.get("status") == "RENT"]
+    problem_agents = [r for r in results if r.get("status") != "RENT" and r.get("findings")]
+
+    syntes = ""
+    if ordered:
+        client_inst = get_client(s)
+        if client_inst:
+            syntes_lines = []
+            for f in ordered[:12]:
+                syntes_lines.append(
+                    f"Steg {f['step']} [{f['severity']}] {f['agent_name']}: {f['title']} — {f['simple']}"
+                )
+            syntes_input = (
+                f"Projekt: {proj.get('name','')}\n"
+                f"Agenternas fynd (redan sorterade i prioritetsordning):\n"
+                + "\n".join(syntes_lines) +
+                "\n\nSkriv en KORT sammanfattning (max 4 meningar) på svenska för projektägaren: "
+                "vad är det viktigaste att fixa, och i vilken ordning? "
+                "Skriv på enkel svenska, inga tekniska termer. "
+                "Avsluta med: 'Börja med steg 1 och arbeta dig ner.'"
+            )
+            try:
+                resp = client_inst.messages.create(
+                    model=SONNET_DEFAULT,
+                    max_tokens=300,
+                    messages=[{"role": "user", "content": syntes_input}]
+                )
+                syntes = resp.content[0].text.strip()
+            except Exception:
+                syntes = f"Hittade {len(ordered)} saker att åtgärda. Börja med steg 1 och arbeta dig ner."
+
+    await manager.broadcast({
+        "type": "iterate_done",
+        "total_findings": len(ordered),
+        "clean_agents": len(clean_agents),
+        "problem_agents": len(problem_agents),
+        "ordered_findings": ordered,
+        "summary": syntes,
+    })
+
+    return JSONResponse({
+        "total_findings": len(ordered),
+        "ordered_findings": ordered,
+        "clean_agents": [r["id"] for r in clean_agents],
+        "summary": syntes,
+    })
 
 
 if __name__ == "__main__":

@@ -533,7 +533,7 @@
   },
   {
     "name": "git add returncode kontrolleras inte per fil i apply_and_push",
-    "status": "Planerad",
+    "status": "Granskas",
     "phase": "Bug",
     "priority_tag": "KRITISKT",
     "description": "I apply_and_push (rad 843) körs subprocess.run för 'git add f' i en loop utan att kontrollera returncode — om en enskild fil misslyckas (t.ex. utanför repo, låst fil) fortsätter funktionen tyst och skapar en inkomplett commit. Lägg till 'if result.returncode != 0: return False, f\"git add misslyckades för {f}: {result.stderr}\"' efter varje git add-anrop. [Fil: app.py]",
@@ -593,5 +593,50 @@
     "description": "Funktionen load_memory (rad 271) begränsar varje minnesfil till 16000 tecken totalt men loggar ingen varning när trunkering sker — agenter som förlitar sig på fullständig kontext (t.ex. ARCHITECTURE.md) kan ta beslut baserat på ofullständig information. Lägg till en logger.warning när innehållet trunkeras och inkludera hur många tecken som utelämnades. [Fil: app.py]",
     "source": "kod-iterator",
     "iteration": 1
+  },
+  {
+    "id": 66,
+    "name": "git add returncode kontrolleras inte per fil i apply_and_push: ↳ 1. settings.json innehåller api_key (sk-ant-...) och",
+    "phase": "Backlog",
+    "status": "Planerad",
+    "parent_feature": "git add returncode kontrolleras inte per fil i apply_and_push",
+    "spec": {
+      "name": "git add returncode kontrolleras inte per fil i apply_and_push: ↳ 1. settings.json innehåller api_key (sk-ant-...) och",
+      "description": "settings.json innehåller api_key (sk-ant-...) och github_token (ghp_...) i klartext — dessa är hårdkodade i DEFAULT_SETTINGS och exponeras via GET /api/settings som returnerar hela settings-objektet inklusive hemliga nycklar",
+      "prioritet": 1,
+      "beroende_av": [],
+      "källa": "Säkerhetsansvarig"
+    },
+    "created": "2026-06-09T15:37:31.140383"
+  },
+  {
+    "id": 67,
+    "name": "git add returncode kontrolleras inte per fil i apply_and_push: ↳ 2. GET /api/settings (get_settings_api rad ~1611) ret",
+    "phase": "Backlog",
+    "status": "Planerad",
+    "parent_feature": "git add returncode kontrolleras inte per fil i apply_and_push",
+    "spec": {
+      "name": "git add returncode kontrolleras inte per fil i apply_and_push: ↳ 2. GET /api/settings (get_settings_api rad ~1611) ret",
+      "description": "GET /api/settings (get_settings_api rad ~1611) returnerar troligen hela settings-objektet med api_key och github_token i klartext till frontend — ingen autentisering/auktorisering skyddar denna endpoint",
+      "prioritet": 2,
+      "beroende_av": [],
+      "källa": "Säkerhetsansvarig"
+    },
+    "created": "2026-06-09T15:37:31.140428"
+  },
+  {
+    "id": 68,
+    "name": "git add returncode kontrolleras inte per fil i apply_and_push: ↳ 3. apply_and_push är definierad på MINST TRE ställen:",
+    "phase": "Backlog",
+    "status": "Planerad",
+    "parent_feature": "git add returncode kontrolleras inte per fil i apply_and_push",
+    "spec": {
+      "name": "git add returncode kontrolleras inte per fil i apply_and_push: ↳ 3. apply_and_push är definierad på MINST TRE ställen:",
+      "description": "apply_and_push är definierad på MINST TRE ställen: app.py (rad 721 och 922), git_utils.py (rad 354 och 555), agents_config.py (rad 678 och 879) — massiv duplicering av affärslogik utan tydligt ägarskap",
+      "prioritet": 3,
+      "beroende_av": [],
+      "källa": "Arkitekt"
+    },
+    "created": "2026-06-09T15:37:31.140459"
   }
 ]
