@@ -1356,6 +1356,46 @@ async def update_project_settings(project_id: str, payload: dict):
 async def get_features():
     proj=get_active_project(); return JSONResponse(load_features(proj["id"]) if proj else [])
 
+@app.post("/api/explain-backlog")
+async def explain_backlog(payload: dict):
+    import re as _re
+    s = load_settings()
+    proj = get_active_project()
+    if not proj:
+        return JSONResponse({"explanation": "Inget aktivt projekt."})
+    features = load_features(proj["id"])
+    if not features:
+        return JSONResponse({"explanation": "Inga features i backlogen ännu."})
+    lines = []
+    for f in features:
+        parent_note = f" (deluppgift av: {f['parent_feature']})" if f.get("parent_feature") else ""
+        lines.append(f"- {f['name']} [{f.get('status','Planerad')}] ({f.get('phase','MVP')}){parent_note}")
+    features_str = "\n".join(lines)
+    prompt = (
+        "Du är en erfaren produktchef som hjälper en icke-teknisk grundare prioritera sin backlog.\n\n"
+        f"Projekt: {proj.get('name','')}\n"
+        f"Features och uppgifter:\n{features_str}\n\n"
+        "Analysera listan och svara på svenska med:\n"
+        "1. **Gör nu** (max 2-3 saker) — och kortfattat VARFÖR\n"
+        "2. **Kan vänta** — och varför\n"
+        "3. **Dubbletter eller förvirring** — om du ser sådant\n\n"
+        "Skriv enkelt, som till en vd som inte är tekniker. Inga kodsnuttar. Max 180 ord."
+    )
+    try:
+        import anthropic as _ant
+        client = _ant.Anthropic(api_key=s.get("api_key",""))
+        msg = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=500,
+            messages=[{"role":"user","content":prompt}]
+        )
+        text = msg.content[0].text
+        text = _re.sub(r'\*\*(.*?)\*\*', r'<strong>\1</strong>', text)
+        text = text.replace("\n", "<br>")
+        return JSONResponse({"explanation": text})
+    except Exception as e:
+        return JSONResponse({"explanation": f"❌ Fel vid analys: {str(e)[:120]}"})
+
 @app.delete("/api/features/{feature_name:path}")
 async def delete_feature(feature_name: str):
     proj = get_active_project()
@@ -2543,6 +2583,7 @@ async def git_push_direct(payload: dict):
     return JSONResponse({"ok": True, "url": url})
 
 
+
 @app.post("/api/git-push-direct")
 async def git_push_direct(payload: dict):
     repo_name = payload.get("repo_name","")
@@ -2583,7 +2624,3 @@ async def start_file_watcher():
             except Exception:
                 pass
     asyncio.ensure_future(_watch())
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=False)
