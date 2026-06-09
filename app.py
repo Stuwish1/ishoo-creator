@@ -269,8 +269,16 @@ def load_projects() -> dict:
     }]}
     save_projects(default); return default
 
+def _atomic_json_write(path, data):
+    """Atomic JSON write: skriv till temp-fil, sen rename för att undvika truncation."""
+    import tempfile, os as _os
+    path = Path(path)
+    tmp = path.with_suffix('.tmp')
+    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    _os.replace(str(tmp), str(path))
+
 def save_projects(data: dict):
-    PROJECTS_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    _atomic_json_write(PROJECTS_FILE, data)
 
 def get_active_project() -> dict | None:
     data = load_projects()
@@ -304,8 +312,7 @@ def load_features(pid: str) -> list:
     return json.loads(f.read_text(encoding="utf-8")) if f.exists() else []
 
 def save_features(pid: str, features: list):
-    (project_dir(pid) / "features.json").write_text(
-        json.dumps(features, ensure_ascii=False, indent=2), encoding="utf-8")
+    _atomic_json_write(project_dir(pid) / "features.json", features)
 
 def add_feature(pid: str, name: str, phase: str = "MVP", spec: dict = None):
     features = load_features(pid)

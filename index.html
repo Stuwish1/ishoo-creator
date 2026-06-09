@@ -83,6 +83,15 @@ header h1{font-size:14px;font-weight:700;margin-right:4px;}
 .fb-granskas{background:rgba(234,179,8,.15);color:var(--yellow);}
 .fb-klar{background:rgba(34,197,94,.15);color:var(--green);}
 .fb-i-dev{background:rgba(99,102,241,.2);color:var(--accent);}
+.fb-pushad{background:rgba(34,197,94,.2);color:#22c55e;}
+.fb-byggd{background:rgba(34,197,94,.2);color:#22c55e;}
+.fb-blockerad{background:rgba(239,68,68,.2);color:#f87171;}
+.fb-avbruten{background:rgba(107,114,128,.15);color:var(--muted);text-decoration:line-through;}
+/* Per-fas färger på f-phase badge */
+.f-phase-mvp{background:rgba(99,102,241,.2);color:var(--accent);}
+.f-phase-v1{background:rgba(245,158,11,.2);color:#f59e0b;}
+.f-phase-v2{background:rgba(249,115,22,.2);color:var(--orange);}
+.f-phase-backlog{background:rgba(107,114,128,.15);color:var(--muted);}
 /* QUEUE */
 .queue-item{padding:7px 12px;font-size:12px;display:flex;align-items:center;gap:6px;border-bottom:1px solid rgba(42,45,58,.4);cursor:default;}
 .qi-name{flex:1;color:var(--text);}
@@ -368,6 +377,7 @@ header h1{font-size:14px;font-weight:700;margin-right:4px;}
 .log-entry.type-warn .log-entry-msg{color:#fcd34d;}
 .log-entry.type-success .log-entry-msg{color:#4ade80;}
 .log-entry.type-muted .log-entry-msg{color:var(--muted);}
+.log-entry.type-info .log-entry-msg{color:var(--text);opacity:.85;}
 .log-clear-btn{padding:4px 12px;font-size:10px;color:var(--muted);background:none;border:none;cursor:pointer;text-align:left;border-top:1px solid var(--border);flex-shrink:0;}
 .log-clear-btn:hover{color:var(--text);}
 
@@ -1070,6 +1080,10 @@ const STATUS_MAP = {
   'debug_done':        (m) => setStatus('🐛 Felsökning klar', (m.issues_found||0)+' problem hittade', 'done'),
   'inspector_done':    (m) => setStatus('🏗️ Besiktning', m.approved ? 'Koden godkänd ✅' : 'Problem hittades ⚠️', m.approved?'done':'error'),
   'loop_blocked':      (m) => setStatus('⏸️ Väntar', 'Pipeline körs redan ('+m.elapsed+'s)…', 'active'),
+  'push_error':        (m) => setStatus('❌ Push misslyckades', m.message||'Kontrollera git-konfiguration', 'error'),
+  'loop_max_reached':  (m) => setStatus('🛑 Loop-gräns nådd', (m.attempts||'?')+' försök — granska felen manuellt', 'error'),
+  'pipeline_done':     (m) => setStatus(m.success?'✅ Pipeline klar':'⚠️ Pipeline avslutad', m.feature||'', m.success?'done':'error'),
+  'strukturindex_updated': () => setStatus('📁 Strukturindex', 'Katalogindex uppdaterat', 'done'),
   'phase_start':       (m) => {
     const names = {1:'🎨 Design', 2:'🔨 Bygg', 3:'🔍 QA'};
     const label = names[m.phase] || m.name;
@@ -1538,9 +1552,15 @@ function handleWS(msg){
     addMsg('assistant',`🚀 **${msg.feature}** pushad till **${envLbl}**!${msg.env==='dev'?'\n\nTesta i dev. När nöjd — byt till Prod-läge och pusha till produktion.':''}`);
     closeDiff();hideActionBar();loadFeatures();
   }
-  else if(msg.type==='push_error'){setProgress(0,'❌ Push misslyckades');addMsg('assistant',`❌ ${msg.message}`);}
+  else if(msg.type==='push_error'){setProgress(0,'❌ Push misslyckades');addLog(`❌ Push misslyckades: ${msg.message||''}`, 'error');addMsg('assistant',`❌ ${msg.message}`);}
   else if(msg.type==='revert_done'){addMsg('assistant',`✅ Återgick till commit \`${msg.hash.slice(0,8)}\`.`);}
   else if(msg.type==='architecture_updated'){/* tyst — ARCHITECTURE.md uppdaterat i bakgrunden */}
+  else if(msg.type==='inspector_done'){
+    addLog(msg.approved ? `✅ Besiktning klar: ${msg.summary||'Koden godkänd'}` : `⚠️ Besiktning: ${msg.summary||'Problem hittades — QA-retry'}`, msg.approved ? 'success' : 'warn');
+  }
+  else if(msg.type==='strukturindex_updated'){
+    addLog('📁 Strukturindex uppdaterat (katalogkarta)', 'muted');
+  }
   else if(msg.type==='build_verify_start') setProgress(10,`Verifierar bygget (${msg.iteration}/${msg.max})...`);
   else if(msg.type==='build_verify_running') setProgress(30,msg.message);
   else if(msg.type==='build_verify_error'){
@@ -1690,7 +1710,7 @@ function renderFeatureRow(f, subCount, subDone){
   return `<div class="f-item f-item-clickable" onclick="selectFeatureAction('${n}','${f.status||'Planerad'}')">
     <div style="flex:1;min-width:0;">
       <div class="f-name">${f.name}${blocked}${progress}</div>
-      <span class="f-phase">${f.phase||'MVP'}</span>
+      <span class="f-phase f-phase-${(f.phase||'MVP').toLowerCase().replace(/ /g,'-')}">${f.phase||'MVP'}</span>
     </div>
     ${_featureBadge(f.status)}
     ${_featureActions(f.name)}
